@@ -115,6 +115,75 @@ describe("server-request callbacks (FR-2.1)", () => {
   });
 });
 
+describe("login (FR-3.2, Phase 2 CLI support)", () => {
+  test("startLogin returns the authUrl and loginId from account/login/start", async () => {
+    const adapter = makeAdapter();
+
+    await adapter.start();
+    const login = await adapter.startLogin({ type: "chatgpt" });
+
+    expect(login).toEqual({
+      type: "chatgpt",
+      authUrl: "https://auth.example.com/mock-oauth",
+      loginId: "login-1",
+    });
+  });
+
+  test("account/login/completed is emitted as the loginCompleted event", async () => {
+    const adapter = makeAdapter();
+    const completed = new Promise<{ success: boolean; loginId?: string | null }>((resolve) => {
+      adapter.on("loginCompleted", resolve);
+    });
+
+    await adapter.start();
+    await adapter.startLogin({ type: "chatgpt" });
+
+    expect(await completed).toEqual({ success: true, loginId: "login-1" });
+  });
+});
+
+describe("windows sandbox probe (Phase 2 checkpoint support)", () => {
+  test("windowsSandboxReadiness returns the probed status", async () => {
+    const adapter = makeAdapter();
+
+    await adapter.start();
+
+    expect(await adapter.windowsSandboxReadiness()).toEqual({ status: "ready" });
+  });
+
+  test("setupStart reports started and completion arrives as an event", async () => {
+    const adapter = makeAdapter("sandbox-setup");
+    const completed = new Promise<{ success: boolean; mode: string }>((resolve) => {
+      adapter.on("windowsSandboxSetupCompleted", resolve);
+    });
+
+    await adapter.start();
+    expect(await adapter.windowsSandboxReadiness()).toEqual({ status: "notConfigured" });
+    const setup = await adapter.windowsSandboxSetupStart({ mode: "unelevated" });
+
+    expect(setup).toEqual({ started: true });
+    expect(await completed).toEqual({ success: true, mode: "unelevated" });
+  });
+});
+
+describe("wire-format tolerance (Phase 2 Windows risk)", () => {
+  test("CRLF-terminated server lines parse identically to LF", async () => {
+    const adapter = makeAdapter("crlf");
+    const deltas: string[] = [];
+    adapter.on("agentMessageDelta", (payload) => deltas.push(payload.delta));
+    const turnCompleted = new Promise<void>((resolve) => {
+      adapter.on("turnCompleted", () => resolve());
+    });
+
+    await adapter.start();
+    const thread = await adapter.startThread({ cwd: "/tmp", sandbox: "read-only" });
+    await adapter.startTurn({ threadId: thread.threadId, input: [{ type: "text", text: "go" }] });
+    await turnCompleted;
+
+    expect(deltas.join("")).toBe("SPIKE_OK");
+  });
+});
+
 describe("process death (FR-2.5, detection half)", () => {
   test("codex dying mid-turn emits a terminal error event and fails later requests", async () => {
     const adapter = makeAdapter("die-mid-turn");

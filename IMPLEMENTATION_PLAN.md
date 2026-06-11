@@ -45,7 +45,9 @@ Repo layout (PRD Open Q7): pnpm workspace in this directory, beside `t3code/` (g
 
 ---
 
-## Phase 2: Windows reality check (manual checkpoint, user-assisted)
+## Phase 2: Windows reality check (manual checkpoint, user-assisted) — ✅ COMPLETE (2026-06-11; Windows go/no-go run DEFERRED by Peter to the Phase 11 release gate)
+
+> Done: `foreman-dev login` + `sandbox-check` commands; adapter `startLogin`/`windowsSandboxReadiness`/`windowsSandboxSetupStart` + `loginCompleted`/`windowsSandboxSetupCompleted` events (5 new mock-peer tests incl. CRLF wire guard); `docs/windows-findings.md` checklist. Verified on Linux: real-codex `login` prints a live authUrl; `sandbox-check` probes readiness and fails setup with the expected "only supported on Windows". **Deferred, not done: the five checks on a real Windows machine (PRD Open Q1).** Peter marked the phase complete 2026-06-11 without that evidence; the open risk now lands on Phase 11's release gate — run `docs/windows-findings.md` before any packaging work, and the OpenCode-fallback decision still escalates to Peter if it fails.
 
 **Goal:** Go/no-go evidence for PRD Open Q1: the Phase-1 CLI works on native Windows 10/11 with the pinned codex binary, including sandbox setup and login.
 

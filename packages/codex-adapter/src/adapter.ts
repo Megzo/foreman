@@ -6,6 +6,8 @@ import type {
   CommandApprovalRequest,
   FileChangeApprovalRequest,
   InterruptTurnOptions,
+  StartLoginOptions,
+  StartLoginResult,
   StartThreadOptions,
   StartTurnOptions,
   SteerTurnOptions,
@@ -39,6 +41,8 @@ export interface AgentAdapter {
   isRunning(): boolean;
 
   readAccount(): Promise<AccountReadResult>;
+  /** Begin a login; completion arrives as the `loginCompleted` event. */
+  startLogin(options: StartLoginOptions): Promise<StartLoginResult>;
 
   startThread(options: StartThreadOptions): Promise<ThreadRef>;
   resumeThread(threadId: string): Promise<ThreadRef>;

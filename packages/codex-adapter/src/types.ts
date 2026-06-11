@@ -28,6 +28,46 @@ export interface AccountReadResult {
   requiresOpenaiAuth?: boolean;
 }
 
+/** schema: LoginAccountParams, the variants Foreman uses (FR-3.2/3.3). */
+export interface StartLoginOptions {
+  type: "chatgpt" | "chatgptDeviceCode";
+}
+
+/** schema: LoginAccountResponse, the variants Foreman uses. */
+export type StartLoginResult =
+  | { type: "chatgpt"; authUrl: string; loginId: string }
+  | { type: "chatgptDeviceCode"; loginId: string; userCode: string; verificationUrl: string };
+
+/** schema: AccountLoginCompletedNotification. */
+export interface LoginCompletedNotification {
+  success: boolean;
+  loginId?: string | null;
+  error?: string | null;
+}
+
+/** schema: WindowsSandboxReadinessResponse. */
+export interface WindowsSandboxReadinessResult {
+  status: "ready" | "notConfigured" | "updateRequired";
+}
+
+/** schema: WindowsSandboxSetupStartParams. */
+export interface WindowsSandboxSetupStartOptions {
+  mode: "elevated" | "unelevated";
+  cwd?: string;
+}
+
+/** schema: WindowsSandboxSetupStartResponse. */
+export interface WindowsSandboxSetupStartResult {
+  started: boolean;
+}
+
+/** schema: WindowsSandboxSetupCompletedNotification. */
+export interface WindowsSandboxSetupCompletedNotification {
+  success: boolean;
+  mode: "elevated" | "unelevated";
+  error?: string | null;
+}
+
 /** schema: SandboxMode (thread/start `sandbox`). */
 export type SandboxMode = "read-only" | "workspace-write" | "danger-full-access";
 

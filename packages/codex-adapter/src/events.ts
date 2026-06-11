@@ -2,7 +2,9 @@ import type {
   AdapterErrorEvent,
   AgentMessageDeltaNotification,
   ItemNotification,
+  LoginCompletedNotification,
   TurnCompletedNotification,
+  WindowsSandboxSetupCompletedNotification,
 } from "./types.js";
 
 export interface AdapterEventMap {
@@ -10,6 +12,8 @@ export interface AdapterEventMap {
   agentMessageDelta: AgentMessageDeltaNotification;
   itemCompleted: ItemNotification;
   turnCompleted: TurnCompletedNotification;
+  loginCompleted: LoginCompletedNotification;
+  windowsSandboxSetupCompleted: WindowsSandboxSetupCompletedNotification;
   /** Terminal: the agent process died or the connection is unusable. */
   error: AdapterErrorEvent;
 }

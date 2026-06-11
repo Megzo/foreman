@@ -7,10 +7,15 @@ import type {
   AgentInfo,
   ClientInfo,
   InterruptTurnOptions,
+  StartLoginOptions,
+  StartLoginResult,
   StartThreadOptions,
   StartTurnOptions,
   SteerTurnOptions,
   ThreadRef,
+  WindowsSandboxReadinessResult,
+  WindowsSandboxSetupStartOptions,
+  WindowsSandboxSetupStartResult,
 } from "./types.js";
 
 export const PINNED_CODEX_VERSION = "0.138.0";
@@ -140,6 +145,30 @@ export class CodexAdapter implements AgentAdapter {
     return (await this.connection().request("account/read", {})) as AccountReadResult;
   }
 
+  async startLogin(options: StartLoginOptions): Promise<StartLoginResult> {
+    return (await this.connection().request("account/login/start", {
+      type: options.type,
+    })) as StartLoginResult;
+  }
+
+  /** Codex-specific (not on AgentAdapter): native Windows sandbox probe (Phase 2 / Open Q1). */
+  async windowsSandboxReadiness(): Promise<WindowsSandboxReadinessResult> {
+    return (await this.connection().request(
+      "windowsSandbox/readiness",
+      null,
+    )) as WindowsSandboxReadinessResult;
+  }
+
+  /** Codex-specific: drive Windows sandbox setup; completion arrives as `windowsSandboxSetupCompleted`. */
+  async windowsSandboxSetupStart(
+    options: WindowsSandboxSetupStartOptions,
+  ): Promise<WindowsSandboxSetupStartResult> {
+    return (await this.connection().request("windowsSandbox/setupStart", {
+      mode: options.mode,
+      cwd: options.cwd ?? null,
+    })) as WindowsSandboxSetupStartResult;
+  }
+
   async startThread(options: StartThreadOptions): Promise<ThreadRef> {
     const result = await this.connection().request("thread/start", {
       cwd: options.cwd,
@@ -214,6 +243,15 @@ export class CodexAdapter implements AgentAdapter {
     );
     rpc.onNotification("turn/completed", (params) =>
       this.emitter.emit("turnCompleted", params as AdapterEventMap["turnCompleted"]),
+    );
+    rpc.onNotification("account/login/completed", (params) =>
+      this.emitter.emit("loginCompleted", params as AdapterEventMap["loginCompleted"]),
+    );
+    rpc.onNotification("windowsSandbox/setupCompleted", (params) =>
+      this.emitter.emit(
+        "windowsSandboxSetupCompleted",
+        params as AdapterEventMap["windowsSandboxSetupCompleted"],
+      ),
     );
   }
 

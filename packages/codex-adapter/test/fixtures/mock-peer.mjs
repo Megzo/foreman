@@ -7,6 +7,9 @@
 //   approval     turn sends a commandExecution approval request, echoes the
 //                client's decision back as a delta, then completes the turn
 //   die-mid-turn turn emits one delta, then the process exits 1
+//   sandbox-setup windowsSandbox/readiness reports notConfigured until
+//                setupStart runs, then ready (otherwise happy)
+//   crlf         happy, but every line is CRLF-terminated (codex.exe wire risk)
 //
 // The peer enforces protocol order: any request before `initialize` +
 // `initialized` (or an initialize without experimentalApi) gets an error
@@ -16,10 +19,12 @@ const scenario = process.argv[2] ?? "happy";
 
 let initializeSeen = false;
 let initialized = false;
+let sandboxConfigured = scenario !== "sandbox-setup";
 let nextServerRequestId = 9000;
 const pendingServerRequests = new Map();
 
-const write = (msg, callback) => process.stdout.write(`${JSON.stringify(msg)}\n`, callback);
+const EOL = scenario === "crlf" ? "\r\n" : "\n";
+const write = (msg, callback) => process.stdout.write(`${JSON.stringify(msg)}${EOL}`, callback);
 const respond = (id, result) => write({ jsonrpc: "2.0", id, result });
 const respondError = (id, code, message) => write({ jsonrpc: "2.0", id, error: { code, message } });
 const notify = (method, params) => write({ jsonrpc: "2.0", method, params });
@@ -88,6 +93,23 @@ function handleRequest({ id, method, params }) {
     return respondError(id, -32002, `request before handshake completed: ${method}`);
   }
   switch (method) {
+    case "account/login/start":
+      respond(id, {
+        type: "chatgpt",
+        authUrl: "https://auth.example.com/mock-oauth",
+        loginId: "login-1",
+      });
+      // The real server notifies once the OAuth dance finishes; the mock's
+      // "user" signs in instantly.
+      notify("account/login/completed", { success: true, loginId: "login-1" });
+      return;
+    case "windowsSandbox/readiness":
+      return respond(id, { status: sandboxConfigured ? "ready" : "notConfigured" });
+    case "windowsSandbox/setupStart":
+      respond(id, { started: true });
+      sandboxConfigured = true;
+      notify("windowsSandbox/setupCompleted", { success: true, mode: params?.mode ?? "unelevated" });
+      return;
     case "account/read":
       return respond(id, {
         account: { type: "chatgpt", email: "mock@example.com", planType: "plus" },
