@@ -67,4 +67,16 @@ turn streams to completion (same behavior verified on WSL 2026-06-11).
 
 Notes / quirks observed (paths, quoting, console encoding, firewall prompts):
 
--
+- **F-1 (2026-06-12, found during check 1):** `spawn("codex")` fails with
+  ENOENT on win32 — npm installs `codex` as a `.cmd` shim, which PowerShell
+  resolves but Node's spawn() does not (only `.exe` is auto-resolved). Worse,
+  the unhandled spawn `error` event crashed the CLI process. Fixed per the
+  regression-test-first rule: graceful spawn failure in `codex.ts` +
+  `resolveCodexBin()` (PATH scan for `codex.exe`, then npm-shim → vendored
+  `@openai/codex-win32-x64\vendor\...\bin\codex.exe`, layout verified on the
+  real machine), table-driven tests green on Linux. `CODEX_BIN` still
+  overrides everything. Phase 11 must spawn the *bundled* codex.exe by
+  absolute path, which sidesteps this entirely.
+- The vendored npm package also ships `codex-windows-sandbox-setup.exe` and
+  `codex-command-runner.exe` beside the main binary — note for Phase 11
+  bundling (codex.exe alone may not be sufficient to copy).

@@ -5,6 +5,7 @@ export {
   type AdapterLogger,
   type CodexAdapterOptions,
 } from "./codex.js";
+export { resolveCodexBin, type ResolveCodexBinOptions } from "./resolve-bin.js";
 export {
   TypedEventEmitter,
   type AdapterEventHandler,

@@ -8,10 +8,10 @@
 // Env: CODEX_BIN (default "codex"), FOREMAN_CODEX_HOME (sets CODEX_HOME for the
 // spawned codex; default: inherit, i.e. the developer's own login).
 
-import { mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CodexAdapter } from "@foreman/codex-adapter";
+import { CodexAdapter, resolveCodexBin } from "@foreman/codex-adapter";
 
 const TURN_TIMEOUT_MS = 120_000;
 const LOGIN_TIMEOUT_MS = 300_000; // the user has to finish an OAuth dance in a browser
@@ -19,8 +19,13 @@ const SANDBOX_SETUP_TIMEOUT_MS = 300_000;
 
 function makeAdapter(): CodexAdapter {
   const codexHome = process.env.FOREMAN_CODEX_HOME;
+  const bin = resolveCodexBin({
+    platform: process.platform,
+    env: process.env,
+    fileExists: existsSync,
+  });
   return new CodexAdapter({
-    command: { bin: process.env.CODEX_BIN ?? "codex", args: ["app-server"] },
+    command: { bin, args: ["app-server"] },
     ...(codexHome ? { codexHome } : {}),
     logger: { warn: (message) => console.error(`[foreman-dev] ${message}`) },
   });

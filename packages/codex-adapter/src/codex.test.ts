@@ -166,6 +166,18 @@ describe("windows sandbox probe (Phase 2 checkpoint support)", () => {
   });
 });
 
+describe("spawn failure (Phase 2 finding: npm .cmd shim ENOENT on win32)", () => {
+  test("a nonexistent binary rejects start() instead of crashing the process", async () => {
+    const adapter = new CodexAdapter({
+      command: { bin: "definitely-not-a-real-binary-foreman", args: ["app-server"] },
+    });
+    adapters.push(adapter);
+
+    await expect(adapter.start()).rejects.toThrow(/failed to spawn/i);
+    expect(adapter.isRunning()).toBe(false);
+  });
+});
+
 describe("wire-format tolerance (Phase 2 Windows risk)", () => {
   test("CRLF-terminated server lines parse identically to LF", async () => {
     const adapter = makeAdapter("crlf");

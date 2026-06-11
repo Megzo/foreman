@@ -96,6 +96,16 @@ export class CodexAdapter implements AgentAdapter {
     this.routeServerRequests(rpc);
 
     this.exited = new Promise<void>((resolve) => {
+      // Fires when the process cannot be spawned at all (e.g. ENOENT — on
+      // Windows the npm-installed `codex` is a .cmd shim spawn() can't see).
+      // Without this handler the 'error' event crashes the host process.
+      child.on("error", (error) => {
+        this.state = "stopped";
+        rpc.failPending(
+          new Error(`failed to spawn ${command.bin}: ${error.message}`),
+        );
+        resolve();
+      });
       child.on("exit", (code, signal) => {
         const wasStopping = this.state === "stopping" || this.state === "stopped";
         this.state = "stopped";
