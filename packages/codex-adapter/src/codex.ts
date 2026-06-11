@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { mkdirSync } from "node:fs";
 import type { AgentAdapter, ServerRequestHandlers } from "./adapter.js";
 import { TypedEventEmitter, type AdapterEventMap } from "./events.js";
 import { JsonRpcConnection } from "./rpc.js";
@@ -78,6 +79,9 @@ export class CodexAdapter implements AgentAdapter {
     const command = this.options.command ?? { bin: "codex", args: ["app-server"] };
     const env: NodeJS.ProcessEnv = { ...process.env, ...this.options.env };
     if (this.options.codexHome !== undefined) {
+      // codex 0.138.0 on Windows exits 1 if CODEX_HOME does not exist (F-2);
+      // the shell owns this directory (FR-3.5), so provision it.
+      mkdirSync(this.options.codexHome, { recursive: true });
       env.CODEX_HOME = this.options.codexHome;
     }
 

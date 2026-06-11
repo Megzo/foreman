@@ -1,3 +1,6 @@
+import { existsSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, test } from "vitest";
 import { CodexAdapter } from "./codex.js";
@@ -163,6 +166,19 @@ describe("windows sandbox probe (Phase 2 checkpoint support)", () => {
 
     expect(setup).toEqual({ started: true });
     expect(await completed).toEqual({ success: true, mode: "unelevated" });
+  });
+});
+
+describe("codexHome provisioning (Phase 2 finding F-2: codex exits if the dir is missing)", () => {
+  test("a missing codexHome directory is created before spawn and reaches the child", async () => {
+    const home = join(mkdtempSync(join(tmpdir(), "foreman-home-")), "nested", "codex-home");
+    const adapter = makeAdapter("happy", { codexHome: home });
+
+    const info = await adapter.start();
+
+    expect(existsSync(home)).toBe(true);
+    // The mock peer reports the CODEX_HOME env it received in its initialize result.
+    expect(info.codexHome).toBe(home);
   });
 });
 

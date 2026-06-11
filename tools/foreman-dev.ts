@@ -200,28 +200,33 @@ async function chat(prompt: string): Promise<number> {
 const [command, ...rest] = process.argv.slice(2);
 
 let exitCode: number;
-switch (command) {
-  case "auth-status":
-    exitCode = await authStatus();
-    break;
-  case "login":
-    exitCode = await login();
-    break;
-  case "sandbox-check":
-    exitCode = await sandboxCheck();
-    break;
-  case "chat": {
-    const prompt = rest.join(" ").trim();
-    if (!prompt) {
-      console.error('usage: foreman-dev chat "<prompt>"');
-      exitCode = 64;
+try {
+  switch (command) {
+    case "auth-status":
+      exitCode = await authStatus();
+      break;
+    case "login":
+      exitCode = await login();
+      break;
+    case "sandbox-check":
+      exitCode = await sandboxCheck();
+      break;
+    case "chat": {
+      const prompt = rest.join(" ").trim();
+      if (!prompt) {
+        console.error('usage: foreman-dev chat "<prompt>"');
+        exitCode = 64;
+        break;
+      }
+      exitCode = await chat(prompt);
       break;
     }
-    exitCode = await chat(prompt);
-    break;
+    default:
+      console.error("usage: foreman-dev <chat|auth-status|login|sandbox-check>");
+      exitCode = 64;
   }
-  default:
-    console.error("usage: foreman-dev <chat|auth-status|login|sandbox-check>");
-    exitCode = 64;
+} catch (error) {
+  console.error(`[foreman-dev] ${error instanceof Error ? error.message : String(error)}`);
+  exitCode = 1;
 }
 process.exit(exitCode);

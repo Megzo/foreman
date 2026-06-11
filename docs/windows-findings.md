@@ -77,6 +77,12 @@ Notes / quirks observed (paths, quoting, console encoding, firewall prompts):
   real machine), table-driven tests green on Linux. `CODEX_BIN` still
   overrides everything. Phase 11 must spawn the *bundled* codex.exe by
   absolute path, which sidesteps this entirely.
+- **F-2 (2026-06-12, found during check 1):** codex 0.138.0 on Windows exits 1
+  at startup when `CODEX_HOME` points to a nonexistent directory (Linux runs
+  never hit this because test homes came from `mkdtemp`). Fixed: the adapter
+  now `mkdir -p`s `codexHome` before spawning — the shell owns that directory
+  per FR-3.5. Regression test green on Linux. F-1's fix verified at the same
+  time: codex.exe spawned natively with no `CODEX_BIN` set.
 - The vendored npm package also ships `codex-windows-sandbox-setup.exe` and
   `codex-command-runner.exe` beside the main binary — note for Phase 11
   bundling (codex.exe alone may not be sufficient to copy).
