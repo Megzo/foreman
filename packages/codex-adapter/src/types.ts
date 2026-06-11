@@ -1,0 +1,136 @@
+/**
+ * Hand-derived protocol types for the `codex app-server` messages Foreman uses.
+ * Authoritative reference: t3code/packages/effect-codex-app-server/src/_generated/schema.gen.ts
+ * (grep there before extending — do not guess shapes).
+ */
+
+export interface ClientInfo {
+  name: string;
+  title?: string;
+  version: string;
+}
+
+/** `initialize` result (schema: InitializeResponse). */
+export interface AgentInfo {
+  userAgent: string;
+  codexHome?: string;
+  platformFamily?: string;
+  platformOs?: string;
+}
+
+/** `account/read` result. `account` is null when signed out. */
+export interface AccountReadResult {
+  account: {
+    type: string;
+    email?: string;
+    planType?: string;
+  } | null;
+  requiresOpenaiAuth?: boolean;
+}
+
+/** schema: SandboxMode (thread/start `sandbox`). */
+export type SandboxMode = "read-only" | "workspace-write" | "danger-full-access";
+
+export interface StartThreadOptions {
+  cwd: string;
+  sandbox?: SandboxMode;
+  model?: string;
+}
+
+export interface ThreadRef {
+  threadId: string;
+}
+
+/** schema: V2TurnStartParams__UserInput, the variants Foreman sends. */
+export type TurnInput =
+  | { type: "text"; text: string }
+  | { type: "skill"; name: string; path: string };
+
+export interface StartTurnOptions {
+  threadId: string;
+  input: TurnInput[];
+}
+
+export interface SteerTurnOptions {
+  threadId: string;
+  expectedTurnId: string;
+  input: TurnInput[];
+}
+
+export interface InterruptTurnOptions {
+  threadId: string;
+  turnId?: string;
+}
+
+/** Common addressing fields on item-scoped notifications. */
+export interface ItemScope {
+  threadId?: string;
+  turnId?: string;
+  itemId?: string;
+}
+
+export interface ItemNotification extends ItemScope {
+  item?: { id?: string; type?: string; [key: string]: unknown };
+  [key: string]: unknown;
+}
+
+export interface AgentMessageDeltaNotification extends ItemScope {
+  delta: string;
+}
+
+export interface TurnCompletedNotification {
+  threadId?: string;
+  turnId?: string;
+  usage?: unknown;
+  [key: string]: unknown;
+}
+
+/** Terminal adapter failure (FR-2.5 detection half). */
+export interface AdapterErrorEvent {
+  message: string;
+  exitCode?: number | null;
+  signal?: string | null;
+}
+
+/**
+ * schema: CommandExecutionApprovalDecision. Note: the generated schema uses
+ * accept/decline wording while the PRD speaks of approved/denied — the adapter
+ * passes whatever the registered callback returns through verbatim, so the
+ * policy layer (Phase 5) owns picking the value the pinned codex accepts.
+ */
+export type ApprovalDecision = "accept" | "acceptForSession" | "decline" | "cancel";
+
+export interface ApprovalResponse {
+  decision: ApprovalDecision;
+}
+
+export interface CommandApprovalRequest extends ItemScope {
+  command?: string[] | string;
+  cwd?: string;
+  [key: string]: unknown;
+}
+
+export interface FileChangeApprovalRequest extends ItemScope {
+  [key: string]: unknown;
+}
+
+export interface UserInputQuestionOption {
+  label: string;
+  description?: string;
+}
+
+export interface UserInputQuestion {
+  id: string;
+  header?: string;
+  question: string;
+  options?: UserInputQuestionOption[];
+}
+
+export interface UserInputRequest extends ItemScope {
+  questions?: UserInputQuestion[];
+  [key: string]: unknown;
+}
+
+export interface UserInputResponse {
+  answers: Record<string, { answers: string[] }>;
+}
