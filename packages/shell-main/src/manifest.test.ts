@@ -166,3 +166,51 @@ describe("manifest sandbox mode (Phase 4: thread/start sandbox)", () => {
     await expect(new ManifestLoader().load(writeManifest(manifest))).rejects.toThrow(/sandbox/);
   });
 });
+
+describe("manifest policy block (FR-5.2, Phase 5)", () => {
+  test("a full policy block loads and an omitted one stays undefined", async () => {
+    const manifest = validManifest();
+    manifest.policy = {
+      allowCommands: [["python3"], ["pandoc", "--from"]],
+      allowCommandsForSession: [["ebook-convert"]],
+      allowFileChanges: true,
+    };
+
+    const loaded = await new ManifestLoader().load(writeManifest(manifest));
+    expect(loaded.policy).toEqual({
+      allowCommands: [["python3"], ["pandoc", "--from"]],
+      allowCommandsForSession: [["ebook-convert"]],
+      allowFileChanges: true,
+    });
+
+    const without = await new ManifestLoader().load(writeManifest(validManifest()));
+    expect(without.policy).toBeUndefined();
+  });
+
+  test("a non-argv allowlist entry fails naming policy.allowCommands[1]", async () => {
+    const manifest = validManifest();
+    manifest.policy = { allowCommands: [["python3"], "curl example.com"] };
+
+    await expect(new ManifestLoader().load(writeManifest(manifest))).rejects.toThrow(
+      /policy\.allowCommands\[1\]/,
+    );
+  });
+
+  test("an empty argv pattern fails naming policy.allowCommandsForSession[0]", async () => {
+    const manifest = validManifest();
+    manifest.policy = { allowCommandsForSession: [[]] };
+
+    await expect(new ManifestLoader().load(writeManifest(manifest))).rejects.toThrow(
+      /policy\.allowCommandsForSession\[0\]/,
+    );
+  });
+
+  test("a non-boolean allowFileChanges fails naming policy.allowFileChanges", async () => {
+    const manifest = validManifest();
+    manifest.policy = { allowFileChanges: "yes" };
+
+    await expect(new ManifestLoader().load(writeManifest(manifest))).rejects.toThrow(
+      /policy\.allowFileChanges/,
+    );
+  });
+});

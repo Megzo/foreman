@@ -1,12 +1,15 @@
-import type { AgentAdapter } from "@foreman/codex-adapter";
+import type { AgentAdapter, ApprovalResponse } from "@foreman/codex-adapter";
 import type { TaskEvent, TaskParamValues } from "./ipc.js";
 import type { AppManifest } from "./manifest-types.js";
+import { PolicyEngine, type PolicyDecisionRecord } from "./policy.js";
 import type { ProvisionedWorkspace } from "./workspace.js";
 
 export interface TaskRunnerOptions {
   adapter: AgentAdapter;
   manifest: AppManifest;
   workspace: ProvisionedWorkspace;
+  /** Decision-trail sink, wired to the DecisionLog by the shell (FR-5.4). */
+  onPolicyDecision?: (record: PolicyDecisionRecord) => void;
 }
 
 /** The params text item accompanying the skill input (FR-4.1). */
@@ -20,8 +23,9 @@ function paramsText(params: TaskParamValues): string {
  * into TaskEvents for the running view. One active run at a time (Phase 4) —
  * in-memory state only, persistence lands in Phase 7.
  *
- * Until the Phase 5 PolicyEngine, every approval is auto-denied and user-input
- * requests get the first option, so a run can never hang on a hidden dialog.
+ * Approvals are answered by the manifest-baked PolicyEngine (FR-5.1) and
+ * user-input requests get the first option, so a run can never hang on a
+ * hidden dialog. A denial becomes an actionDenied event for the feed (FR-5.3).
  */
 export class TaskRunner {
   private readonly adapter: AgentAdapter;
@@ -35,9 +39,22 @@ export class TaskRunner {
     this.manifest = options.manifest;
     this.workspace = options.workspace;
 
+    const policy = new PolicyEngine({
+      policy: this.manifest.policy,
+      workspaceDir: this.workspace.workspaceDir,
+      onDecision: options.onPolicyDecision,
+    });
+    const decided = (kind: "commandExecution" | "fileChange", response: ApprovalResponse) => {
+      if (response.decision === "decline") {
+        this.whileRunning({ type: "actionDenied", kind });
+      }
+      return response;
+    };
+
     this.adapter.setServerRequestHandlers({
-      commandExecutionApproval: () => ({ decision: "decline" }),
-      fileChangeApproval: () => ({ decision: "decline" }),
+      commandExecutionApproval: (request) =>
+        decided("commandExecution", policy.decide("commandExecution", request)),
+      fileChangeApproval: (request) => decided("fileChange", policy.decide("fileChange", request)),
       userInput: (request) => ({
         answers: Object.fromEntries(
           (request.questions ?? []).map((question) => [

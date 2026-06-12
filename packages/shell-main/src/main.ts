@@ -3,6 +3,7 @@ import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { CodexAdapter, type AgentAdapter } from "@foreman/codex-adapter";
 import { AuthController } from "./auth-controller.js";
 import { codexHomePath } from "./codex-home.js";
+import { DecisionLog } from "./decision-log.js";
 import type { AuthState, BootState, TaskParamValues } from "./ipc.js";
 import { ManifestLoader } from "./manifest.js";
 import { TaskRunner } from "./task-runner.js";
@@ -93,6 +94,9 @@ async function boot(): Promise<void> {
     // Task launch path (FR-4.1/4.2): provision once, lazily, before the first
     // launch; the runner then streams TaskEvents to the renderer.
     const manifest = bootState.manifest;
+    const decisionLog = new DecisionLog(
+      join(app.getPath("userData"), "logs", "policy-decisions.jsonl"),
+    );
     let runnerPromise: Promise<TaskRunner> | undefined;
     const ensureRunner = () =>
       (runnerPromise ??= new WorkspaceProvisioner()
@@ -103,7 +107,12 @@ async function boot(): Promise<void> {
           codexHome: codexHomePath(app.getPath("userData")),
         })
         .then((workspace) => {
-          const runner = new TaskRunner({ adapter, manifest, workspace });
+          const runner = new TaskRunner({
+            adapter,
+            manifest,
+            workspace,
+            onPolicyDecision: (record) => decisionLog.append(record),
+          });
           runner.onEvent((event) => window.webContents.send("shell:taskEvent", event));
           return runner;
         }));

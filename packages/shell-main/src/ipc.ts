@@ -51,6 +51,8 @@ export type TaskEvent =
   | { type: "itemStarted"; itemType: string }
   | { type: "itemCompleted"; itemType: string }
   | { type: "agentDelta"; text: string }
+  /** The policy denied an agent action; the run continues (FR-5.3). */
+  | { type: "actionDenied"; kind: "commandExecution" | "fileChange" }
   | { type: "finished"; status: RunTerminalStatus; errorMessage?: string };
 
 export interface ShellApi {

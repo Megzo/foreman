@@ -6,6 +6,7 @@
 //   happy        handshake -> account -> thread -> turn streaming "SPIKE_OK" deltas
 //   approval     turn sends a commandExecution approval request, echoes the
 //                client's decision back as a delta, then completes the turn
+//   file-approval same, but with a fileChange approval request
 //   die-mid-turn turn emits one delta, then the process exits 1
 //   sandbox-setup windowsSandbox/readiness reports notConfigured until
 //                setupStart runs, then ready (otherwise happy)
@@ -62,19 +63,25 @@ function runTurn(turnInput) {
     return;
   }
 
-  if (scenario === "approval") {
-    sendServerRequest(
-      "item/commandExecution/requestApproval",
-      { ...SCOPE, command: ["bash", "-lc", "curl example.com"], cwd: "/tmp" },
-      (response) => {
-        if (response.error) {
-          notify("mock/approvalError", response.error);
-        } else {
-          notify("item/agentMessage/delta", { ...SCOPE, delta: JSON.stringify(response.result) });
-        }
-        completeTurn();
-      },
-    );
+  if (scenario === "approval" || scenario === "file-approval") {
+    const [method, params] =
+      scenario === "approval"
+        ? [
+            "item/commandExecution/requestApproval",
+            { ...SCOPE, command: ["bash", "-lc", "curl example.com"], cwd: "/tmp", startedAtMs: Date.now() },
+          ]
+        : [
+            "item/fileChange/requestApproval",
+            { ...SCOPE, reason: "extra write access", startedAtMs: Date.now() },
+          ];
+    sendServerRequest(method, params, (response) => {
+      if (response.error) {
+        notify("mock/approvalError", response.error);
+      } else {
+        notify("item/agentMessage/delta", { ...SCOPE, delta: JSON.stringify(response.result) });
+      }
+      completeTurn();
+    });
     return;
   }
 

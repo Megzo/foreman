@@ -32,8 +32,14 @@ export function RunView({ task, events }: { task: ManifestTask; events: TaskEven
     .map((event) => event.text)
     .join("");
   const feed = events
-    .filter((event) => event.type === "itemStarted")
-    .map((event) => feedLine(event.itemType))
+    .map((event) =>
+      event.type === "itemStarted"
+        ? feedLine(event.itemType)
+        : event.type === "actionDenied"
+          ? // Friendly denial, never the raw decision or request (FR-5.3).
+            t("Ezt a műveletet az alkalmazás nem engedélyezi.")
+          : undefined,
+    )
     .filter((line): line is string => line !== undefined);
   const thinking =
     finished === undefined &&

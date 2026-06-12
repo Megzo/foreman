@@ -13,6 +13,11 @@
     }
   },
   "sandbox": "workspace-write",
+  "policy": {
+    "allowCommands": [],
+    "allowCommandsForSession": [],
+    "allowFileChanges": true
+  },
   "tasks": [
     {
       "id": "echo",

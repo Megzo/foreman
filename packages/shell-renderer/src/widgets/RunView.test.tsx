@@ -63,6 +63,19 @@ describe("RunView renders from a recorded event stream (Phase 4)", () => {
     expect(screen.queryByTestId("run-failed")).toBeNull();
   });
 
+  test("a policy denial appears as a friendly localized feed line and the run stays live (FR-5.3)", () => {
+    renderRun([
+      { type: "runStarted", taskId: "echo" },
+      { type: "itemStarted", itemType: "commandExecution" },
+      { type: "actionDenied", kind: "commandExecution" },
+    ]);
+
+    const feed = screen.getByTestId("run-feed");
+    expect(feed.textContent).toMatch(/nem engedélyezi/);
+    expect(feed.textContent).not.toMatch(/decline|denied|commandExecution/);
+    expect(screen.getByTestId("run-status").textContent).toMatch(/Folyamatban/);
+  });
+
   test("a failed run shows the failed state with a friendly cause line (FR-4.6)", () => {
     renderRun([
       { type: "runStarted", taskId: "echo" },

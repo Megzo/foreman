@@ -55,8 +55,22 @@ export interface ManifestTask {
   params?: ManifestFormField[];
 }
 
-/** Sandbox mode for thread/start; full policy blocks arrive in Phase 5 (FR-5.2). */
+/** Sandbox mode for thread/start (FR-5.2, first leg of the policy). */
 export type ManifestSandboxMode = "read-only" | "workspace-write";
+
+/**
+ * Baked approval policy (FR-5.2): anchored argv-prefix allowlists for command
+ * approvals, a flag for file-change approvals. Everything unmatched is denied
+ * (fail closed) — there is no way to express "allow everything".
+ */
+export interface ManifestPolicy {
+  /** Patterns answered "accept": each is an argv prefix, e.g. ["python3"]. */
+  allowCommands?: string[][];
+  /** Hot-path patterns answered "acceptForSession" (one approval per session). */
+  allowCommandsForSession?: string[][];
+  /** When true, file-change requests scoped to the workspace are accepted. */
+  allowFileChanges?: boolean;
+}
 
 export interface AppManifest {
   schemaVersion: 1;
@@ -66,5 +80,6 @@ export interface AppManifest {
   locale?: "hu" | "en";
   branding: ManifestBranding;
   sandbox?: ManifestSandboxMode;
+  policy?: ManifestPolicy;
   tasks: ManifestTask[];
 }

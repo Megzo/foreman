@@ -121,7 +121,9 @@ Repo layout (PRD Open Q7): pnpm workspace in this directory, beside `t3code/` (g
 
 ---
 
-## Phase 5: Policy engine — baked approvals, friendly denials
+## Phase 5: Policy engine — baked approvals, friendly denials — ✅ COMPLETE (2026-06-12)
+
+> Done: `PolicyEngine.decide()` (anchored argv-prefix allowlists → `"accept"`/`"acceptForSession"`, default `"decline"`, never `"cancel"`; string-command tokenization for the real wire shape; fileChange flag with grantRoot-must-be-inside-workspace check; malformed → decline, fail closed); `DecisionLog` (JSONL trail: request, matched rule, decision — FR-5.4, wired in main.ts to `userData/logs/policy-decisions.jsonl`); manifest `policy` block validated naming the field; TaskRunner's hardcoded auto-deny replaced with the engine, denials emit `actionDenied` TaskEvents; RunView renders the friendly localized denial line; echo-demo manifest carries a real policy block (empty allowlists + allowFileChanges). Mock peer gained the `file-approval` scenario; integration tests assert the exact wire decision echoed back and that a declined turn still completes. **Phase 1 carry-forward resolved:** schema.gen.ts wire values are `accept`/`acceptForSession`/`decline`/`cancel`; `decline` is documented "the agent will continue the turn" (= FR-5.3's denied-not-abort), `cancel` is the abort variant the engine never produces. 90 vitest tests + `pnpm e2e` + `pnpm typecheck`/`build`/`smoke` (real codex SPIKE_OK) all green. Carry-forward: the manual hostile-prompt check against real codex (`curl example.com` → friendly denial, no hang, log trail) needs Peter at a signed-in session, alongside the Phase 3/4 GUI walk-throughs.
 
 **Goal:** Approval requests are answered from the manifest policy with no dialog ever shown; a deliberately out-of-policy command is denied and appears in the activity feed as a friendly message while the run continues (PRD acceptance item).
 

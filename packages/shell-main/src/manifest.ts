@@ -73,6 +73,35 @@ function validateTask(value: unknown, field: string): void {
   }
 }
 
+function validateArgvPatterns(value: unknown, field: string): void {
+  if (!Array.isArray(value)) {
+    throw new ManifestError(field, "expected an array of argv-prefix patterns");
+  }
+  value.forEach((pattern, index) => {
+    if (!Array.isArray(pattern) || pattern.length === 0) {
+      throw new ManifestError(
+        `${field}[${index}]`,
+        'expected a non-empty argv array, e.g. ["python3"]',
+      );
+    }
+    pattern.forEach((part, partIndex) => {
+      requireString(part, `${field}[${index}][${partIndex}]`);
+    });
+  });
+}
+
+function validatePolicy(value: unknown, field: string): void {
+  const policy = requireObject(value, field);
+  for (const list of ["allowCommands", "allowCommandsForSession"] as const) {
+    if (policy[list] !== undefined) {
+      validateArgvPatterns(policy[list], `${field}.${list}`);
+    }
+  }
+  if (policy.allowFileChanges !== undefined && typeof policy.allowFileChanges !== "boolean") {
+    throw new ManifestError(`${field}.allowFileChanges`, "expected a boolean");
+  }
+}
+
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
 function requireColor(value: unknown, field: string): void {
@@ -106,6 +135,9 @@ function validateManifest(value: unknown): AppManifest {
   }
   if (root.sandbox !== undefined && root.sandbox !== "read-only" && root.sandbox !== "workspace-write") {
     throw new ManifestError("sandbox", 'expected "read-only" or "workspace-write"');
+  }
+  if (root.policy !== undefined) {
+    validatePolicy(root.policy, "policy");
   }
   const tasks = root.tasks;
   if (!Array.isArray(tasks) || tasks.length === 0) {

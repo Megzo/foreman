@@ -34,12 +34,15 @@ const WORKSPACE: ProvisionedWorkspace = {
 
 const adapters: CodexAdapter[] = [];
 
-function makeRunner(scenario: string): { runner: TaskRunner; events: TaskEvent[] } {
+function makeRunner(
+  scenario: string,
+  manifest: AppManifest = MANIFEST,
+): { runner: TaskRunner; events: TaskEvent[] } {
   const adapter = new CodexAdapter({
     command: { bin: process.execPath, args: [MOCK_PEER, scenario] },
   });
   adapters.push(adapter);
-  const runner = new TaskRunner({ adapter, manifest: MANIFEST, workspace: WORKSPACE });
+  const runner = new TaskRunner({ adapter, manifest, workspace: WORKSPACE });
   const events: TaskEvent[] = [];
   runner.onEvent((event) => events.push(event));
   return { runner, events };
@@ -159,5 +162,79 @@ describe("TaskRunner terminal states (FR-4.6)", () => {
     await runner.launch("echo", { message: "second" });
     await vi.waitFor(() => expect(finished(events)).toBeTruthy());
     expect(finished(events)).toEqual({ type: "finished", status: "success" });
+  });
+});
+
+describe("TaskRunner approval policy (FR-5.1/5.3, Phase 5)", () => {
+  // The mock peer's approval scenario asks to run ["bash", "-lc", "curl example.com"]
+  // mid-turn and echoes the client's decision back as a delta, so the test can
+  // assert the exact wire value the policy produced.
+  function withPolicy(policy: AppManifest["policy"]): AppManifest {
+    return { ...MANIFEST, policy };
+  }
+
+  test("an allowlisted command is answered accept on the wire and the run succeeds", async () => {
+    const { runner, events } = makeRunner(
+      "approval",
+      withPolicy({ allowCommands: [["bash", "-lc"]] }),
+    );
+    await startAdapter();
+
+    await runner.launch("echo", { message: "ok" });
+    await vi.waitFor(() => expect(finished(events)).toBeTruthy());
+
+    expect(finished(events)).toEqual({ type: "finished", status: "success" });
+    const echoed = events
+      .filter((event) => event.type === "agentDelta")
+      .map((event) => (event as { text: string }).text)
+      .join("");
+    expect(JSON.parse(echoed)).toEqual({ decision: "accept" });
+    expect(events.some((event) => event.type === "actionDenied")).toBe(false);
+  });
+
+  test("an out-of-policy command is declined, a denial event is emitted, and the turn continues", async () => {
+    const { runner, events } = makeRunner("approval", withPolicy({ allowCommands: [["python3"]] }));
+    await startAdapter();
+
+    await runner.launch("echo", { message: "ok" });
+    await vi.waitFor(() => expect(finished(events)).toBeTruthy());
+
+    // "decline" (never "cancel") lets the turn run to completion (FR-5.3).
+    expect(finished(events)).toEqual({ type: "finished", status: "success" });
+    const echoed = events
+      .filter((event) => event.type === "agentDelta")
+      .map((event) => (event as { text: string }).text)
+      .join("");
+    expect(JSON.parse(echoed)).toEqual({ decision: "decline" });
+
+    const denied = events.find((event) => event.type === "actionDenied");
+    expect(denied).toEqual({ type: "actionDenied", kind: "commandExecution" });
+    expect(events.indexOf(denied!)).toBeLessThan(events.indexOf(finished(events)!));
+  });
+
+  test("a file-change approval is accepted on the wire when the policy allows it", async () => {
+    const { runner, events } = makeRunner("file-approval", withPolicy({ allowFileChanges: true }));
+    await startAdapter();
+
+    await runner.launch("echo", { message: "ok" });
+    await vi.waitFor(() => expect(finished(events)).toBeTruthy());
+
+    const echoed = events
+      .filter((event) => event.type === "agentDelta")
+      .map((event) => (event as { text: string }).text)
+      .join("");
+    expect(JSON.parse(echoed)).toEqual({ decision: "accept" });
+    expect(events.some((event) => event.type === "actionDenied")).toBe(false);
+  });
+
+  test("a file-change approval under the default policy is declined with a denial event", async () => {
+    const { runner, events } = makeRunner("file-approval", withPolicy(undefined));
+    await startAdapter();
+
+    await runner.launch("echo", { message: "ok" });
+    await vi.waitFor(() => expect(finished(events)).toBeTruthy());
+
+    expect(finished(events)).toEqual({ type: "finished", status: "success" });
+    expect(events).toContainEqual({ type: "actionDenied", kind: "fileChange" });
   });
 });
