@@ -10,6 +10,7 @@
 //   sandbox-setup windowsSandbox/readiness reports notConfigured until
 //                setupStart runs, then ready (otherwise happy)
 //   crlf         happy, but every line is CRLF-terminated (codex.exe wire risk)
+//   signed-out   happy, but account/read reports no account until a login runs
 //
 // The peer enforces protocol order: any request before `initialize` +
 // `initialized` (or an initialize without experimentalApi) gets an error
@@ -19,6 +20,8 @@ const scenario = process.argv[2] ?? "happy";
 
 let initializeSeen = false;
 let initialized = false;
+let signedIn = scenario !== "signed-out";
+let pendingLoginId = null;
 let sandboxConfigured = scenario !== "sandbox-setup";
 let nextServerRequestId = 9000;
 const pendingServerRequests = new Map();
@@ -94,6 +97,7 @@ function handleRequest({ id, method, params }) {
   }
   switch (method) {
     case "account/login/start":
+      pendingLoginId = "login-1";
       respond(id, {
         type: "chatgpt",
         authUrl: "https://auth.example.com/mock-oauth",
@@ -101,8 +105,18 @@ function handleRequest({ id, method, params }) {
       });
       // The real server notifies once the OAuth dance finishes; the mock's
       // "user" signs in instantly.
+      signedIn = true;
       notify("account/login/completed", { success: true, loginId: "login-1" });
       return;
+    case "account/login/cancel":
+      if (params?.loginId === pendingLoginId) {
+        pendingLoginId = null;
+        return respond(id, { status: "canceled" });
+      }
+      return respond(id, { status: "notFound" });
+    case "account/logout":
+      signedIn = false;
+      return respond(id, {});
     case "windowsSandbox/readiness":
       return respond(id, { status: sandboxConfigured ? "ready" : "notConfigured" });
     case "windowsSandbox/setupStart":
@@ -112,8 +126,10 @@ function handleRequest({ id, method, params }) {
       return;
     case "account/read":
       return respond(id, {
-        account: { type: "chatgpt", email: "mock@example.com", planType: "plus" },
-        requiresOpenaiAuth: false,
+        account: signedIn
+          ? { type: "chatgpt", email: "mock@example.com", planType: "plus" }
+          : null,
+        requiresOpenaiAuth: !signedIn,
       });
     case "thread/start":
       return respond(id, { thread: { id: SCOPE.threadId } });

@@ -6,8 +6,10 @@
   "packageManager": "pnpm@11.5.3",
   "scripts": {
     "build": "pnpm -r run build",
+    "dev": "pnpm --filter @foreman/shell-main dev",
+    "dev:mock": "pnpm --filter @foreman/shell-main dev:mock",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p packages/shell-renderer/tsconfig.json",
     "foreman-dev": "tsx tools/foreman-dev.ts",
     "smoke": "tsx tools/foreman-dev.ts chat \"Reply with exactly: SPIKE_OK\""
   },

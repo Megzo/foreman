@@ -3,6 +3,7 @@ import type {
   AccountReadResult,
   AgentInfo,
   ApprovalResponse,
+  CancelLoginResult,
   CommandApprovalRequest,
   FileChangeApprovalRequest,
   InterruptTurnOptions,
@@ -43,6 +44,8 @@ export interface AgentAdapter {
   readAccount(): Promise<AccountReadResult>;
   /** Begin a login; completion arrives as the `loginCompleted` event. */
   startLogin(options: StartLoginOptions): Promise<StartLoginResult>;
+  cancelLogin(loginId: string): Promise<CancelLoginResult>;
+  logout(): Promise<void>;
 
   startThread(options: StartThreadOptions): Promise<ThreadRef>;
   resumeThread(threadId: string): Promise<ThreadRef>;

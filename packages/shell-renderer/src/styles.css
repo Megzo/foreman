@@ -1,0 +1,109 @@
+/* Clean, large-type, desktop-native feel (PRD UX). Colors come from the
+   manifest branding via CSS variables set on .app in App.tsx. */
+
+:root {
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: 17px;
+  color: #1f2328;
+}
+
+body {
+  margin: 0;
+}
+
+.app {
+  min-height: 100vh;
+  background: var(--color-background, #ffffff);
+  display: flex;
+  flex-direction: column;
+}
+
+.login {
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  text-align: center;
+}
+
+.device-code {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.device-url {
+  font-weight: 600;
+}
+
+button.primary {
+  background: var(--color-primary, #1f6feb);
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.9rem 1.6rem;
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+button.link {
+  background: none;
+  border: none;
+  color: var(--color-primary, #1f6feb);
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
+.home {
+  padding: 2rem 3rem;
+}
+
+.home-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.settings-menu {
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 1rem 1.5rem;
+  max-width: 24rem;
+  margin-left: auto;
+}
+
+.launchers {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
+  gap: 1.5rem;
+  margin-top: 2rem;
+}
+
+.launcher-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-start;
+  text-align: left;
+  padding: 1.5rem;
+  font-size: 1.05rem;
+  border: 1px solid #d0d7de;
+  border-radius: 12px;
+  background: #ffffff;
+  border-top: 4px solid var(--color-primary, #1f6feb);
+}
+
+.startup-error {
+  margin: auto;
+  max-width: 40rem;
+}
+
+.startup-error pre {
+  white-space: pre-wrap;
+  background: #fff1f0;
+  border: 1px solid #ffa39e;
+  border-radius: 8px;
+  padding: 1rem;
+}

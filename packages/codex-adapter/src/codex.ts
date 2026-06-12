@@ -6,6 +6,7 @@ import { JsonRpcConnection } from "./rpc.js";
 import type {
   AccountReadResult,
   AgentInfo,
+  CancelLoginResult,
   ClientInfo,
   InterruptTurnOptions,
   StartLoginOptions,
@@ -163,6 +164,16 @@ export class CodexAdapter implements AgentAdapter {
     return (await this.connection().request("account/login/start", {
       type: options.type,
     })) as StartLoginResult;
+  }
+
+  async cancelLogin(loginId: string): Promise<CancelLoginResult> {
+    return (await this.connection().request("account/login/cancel", {
+      loginId,
+    })) as CancelLoginResult;
+  }
+
+  async logout(): Promise<void> {
+    await this.connection().request("account/logout", null);
   }
 
   /** Codex-specific (not on AgentAdapter): native Windows sandbox probe (Phase 2 / Open Q1). */

@@ -132,6 +132,26 @@ describe("login (FR-3.2, Phase 2 CLI support)", () => {
     });
   });
 
+  test("logout calls account/logout and the account then reads as signed out (FR-3.4)", async () => {
+    const adapter = makeAdapter();
+
+    await adapter.start();
+    expect((await adapter.readAccount()).account).not.toBeNull();
+
+    await adapter.logout();
+
+    expect((await adapter.readAccount()).account).toBeNull();
+  });
+
+  test("cancelLogin cancels a pending login by loginId", async () => {
+    const adapter = makeAdapter();
+
+    await adapter.start();
+    const login = await adapter.startLogin({ type: "chatgpt" });
+
+    expect(await adapter.cancelLogin(login.loginId)).toEqual({ status: "canceled" });
+  });
+
   test("account/login/completed is emitted as the loginCompleted event", async () => {
     const adapter = makeAdapter();
     const completed = new Promise<{ success: boolean; loginId?: string | null }>((resolve) => {

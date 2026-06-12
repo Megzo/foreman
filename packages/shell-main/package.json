@@ -1,0 +1,33 @@
+{
+  "name": "@foreman/shell-main",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./ipc": {
+      "types": "./src/ipc.ts",
+      "default": "./src/ipc.ts"
+    }
+  },
+  "main": "./out/main/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "electron-vite dev",
+    "dev:mock": "FOREMAN_MOCK_PEER=1 electron-vite dev"
+  },
+  "dependencies": {
+    "@foreman/codex-adapter": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "@vitejs/plugin-react": "^6.0.2",
+    "electron": "^42.4.0",
+    "electron-vite": "^5.0.0",
+    "typescript": "^5.8.0",
+    "vite": "^8.0.16"
+  }
+}

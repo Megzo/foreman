@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "echo-demo",
+  "name": "Echo Demo",
+  "version": "0.1.0",
+  "locale": "hu",
+  "branding": {
+    "productName": "Echo Demo",
+    "colors": {
+      "primary": "#1f6feb",
+      "background": "#f6f8fa",
+      "accent": "#2da44e"
+    }
+  },
+  "tasks": [
+    {
+      "id": "echo",
+      "label": { "hu": "Visszhang futtatása", "en": "Run echo" },
+      "description": {
+        "hu": "Kiír egy üzenetet, és bemutatja, hogyan fut egy feladat.",
+        "en": "Echoes a message to demonstrate how a task runs."
+      },
+      "skill": { "name": "echo", "path": "skill/SKILL.md" }
+    }
+  ]
+}

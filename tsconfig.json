@@ -3,5 +3,6 @@
   "compilerOptions": {
     "noEmit": true
   },
-  "include": ["packages/*/src/**/*.ts", "tools/**/*.ts", "vitest.config.ts"]
+  "include": ["packages/*/src/**/*.ts", "tools/**/*.ts", "vitest.config.ts"],
+  "exclude": ["packages/shell-renderer"]
 }

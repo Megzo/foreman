@@ -38,6 +38,11 @@ export type StartLoginResult =
   | { type: "chatgpt"; authUrl: string; loginId: string }
   | { type: "chatgptDeviceCode"; loginId: string; userCode: string; verificationUrl: string };
 
+/** schema: V2CancelLoginAccountResponse. */
+export interface CancelLoginResult {
+  status: "canceled" | "notFound";
+}
+
 /** schema: AccountLoginCompletedNotification. */
 export interface LoginCompletedNotification {
   success: boolean;

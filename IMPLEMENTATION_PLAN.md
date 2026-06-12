@@ -69,7 +69,9 @@ Repo layout (PRD Open Q7): pnpm workspace in this directory, beside `t3code/` (g
 
 ---
 
-## Phase 3: Electron skeleton — manifest, branded login, home screen
+## Phase 3: Electron skeleton — manifest, branded login, home screen — ✅ COMPLETE (2026-06-12)
+
+> Done: `packages/shell-main` (`ManifestLoader` with field-naming validation, `codexHomePath`, `AuthController`, Electron `main.ts` + `preload.ts` typed-IPC bridge implementing `ShellApi` from `src/ipc.ts`), `packages/shell-renderer` (App screen state machine, Login incl. device-code fallback + failure/retry, Home with launcher card + settings/logout, StartupError; hu strings through the `t()` stub), `apps/echo-demo/manifest.json`. Adapter gained `logout()`/`cancelLogin()` (schema-verified shapes; mock-peer `signed-out` scenario added). Electron + electron-vite; `pnpm dev` (real codex) and `pnpm dev:mock` (mock peer, offline). 43 tests green; `pnpm typecheck`/`build`/`smoke` green. Verified live on WSLg via CDP: branded login → click → mock OAuth completes → home with launcher card; broken manifest boots to the error screen naming `tasks[0].skill`. Carry-forward: the real-codex browser login → home walk-through needs Peter at a browser (mock-peer path proven; `foreman-dev login` already proved real OAuth on Windows in Phase 2).
 
 **Goal:** `pnpm dev` opens a branded window: app icon/name/colors from a manifest; if signed out, a login screen whose button opens the ChatGPT authUrl in the system browser and which advances to the home screen on `account/login/completed`; home shows the manifest's task launcher card (visible, not yet functional) and the signed-in account in a settings menu.
 
