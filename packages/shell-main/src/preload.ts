@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
-import type { AuthState, ShellApi } from "./ipc.js";
+import type { AuthState, ShellApi, TaskEvent } from "./ipc.js";
 
 /**
  * The only bridge between renderer and main: implements ShellApi over IPC and
@@ -19,6 +19,15 @@ const api: ShellApi = {
   startLogin: (type) => ipcRenderer.invoke("shell:startLogin", type),
   cancelLogin: () => ipcRenderer.invoke("shell:cancelLogin"),
   logout: () => ipcRenderer.invoke("shell:logout"),
+  launchTask: (taskId, params) => ipcRenderer.invoke("shell:launchTask", taskId, params),
+  onTaskEvent(handler) {
+    const listener = (_event: IpcRendererEvent, event: TaskEvent) => handler(event);
+    ipcRenderer.on("shell:taskEvent", listener);
+    return () => {
+      ipcRenderer.removeListener("shell:taskEvent", listener);
+    };
+  },
+  pickFile: (extensions) => ipcRenderer.invoke("shell:pickFile", extensions),
 };
 
 contextBridge.exposeInMainWorld("foreman", api);

@@ -1,10 +1,12 @@
-import { join, resolve } from "node:path";
-import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { dirname, join, resolve } from "node:path";
+import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { CodexAdapter, type AgentAdapter } from "@foreman/codex-adapter";
 import { AuthController } from "./auth-controller.js";
 import { codexHomePath } from "./codex-home.js";
-import type { AuthState, BootState } from "./ipc.js";
+import type { AuthState, BootState, TaskParamValues } from "./ipc.js";
 import { ManifestLoader } from "./manifest.js";
+import { TaskRunner } from "./task-runner.js";
+import { WorkspaceProvisioner } from "./workspace.js";
 
 /**
  * Electron main entry. Boot order (FR-1.1/1.2, FR-3.1):
@@ -15,20 +17,28 @@ import { ManifestLoader } from "./manifest.js";
  *   FOREMAN_MANIFEST   path to the app manifest (default: apps/echo-demo)
  *   FOREMAN_MOCK_PEER  "1" runs the scripted mock peer instead of real codex,
  *                      so UI work is fully offline and burns no tokens.
+ *   FOREMAN_USER_DATA  override the userData dir (E2E isolation).
  */
 
+if (process.env.FOREMAN_USER_DATA) {
+  app.setPath("userData", process.env.FOREMAN_USER_DATA);
+}
+
+// Resolve dev fixtures relative to the bundled entry (<pkg>/out/main/), which
+// is stable across `electron-vite dev` and a direct `electron out/main/main.js`
+// launch (E2E) — app.getAppPath() is not.
 function manifestPath(): string {
   return (
     process.env.FOREMAN_MANIFEST ??
-    resolve(app.getAppPath(), "../../apps/echo-demo/manifest.json")
+    resolve(import.meta.dirname, "../../../../apps/echo-demo/manifest.json")
   );
 }
 
 function makeAdapter(): AgentAdapter {
   if (process.env.FOREMAN_MOCK_PEER === "1") {
     const mockPeer = resolve(
-      app.getAppPath(),
-      "../codex-adapter/test/fixtures/mock-peer.mjs",
+      import.meta.dirname,
+      "../../../codex-adapter/test/fixtures/mock-peer.mjs",
     );
     return new CodexAdapter({
       command: { bin: process.execPath, args: [mockPeer, "signed-out"] },
@@ -79,6 +89,36 @@ async function boot(): Promise<void> {
     );
     ipcMain.handle("shell:cancelLogin", () => auth.cancelLogin());
     ipcMain.handle("shell:logout", () => auth.logout());
+
+    // Task launch path (FR-4.1/4.2): provision once, lazily, before the first
+    // launch; the runner then streams TaskEvents to the renderer.
+    const manifest = bootState.manifest;
+    let runnerPromise: Promise<TaskRunner> | undefined;
+    const ensureRunner = () =>
+      (runnerPromise ??= new WorkspaceProvisioner()
+        .provision({
+          manifest,
+          appDir: dirname(manifestPath()),
+          dataDir: app.getPath("userData"),
+          codexHome: codexHomePath(app.getPath("userData")),
+        })
+        .then((workspace) => {
+          const runner = new TaskRunner({ adapter, manifest, workspace });
+          runner.onEvent((event) => window.webContents.send("shell:taskEvent", event));
+          return runner;
+        }));
+    ipcMain.handle("shell:launchTask", async (_event, taskId: string, params: TaskParamValues) => {
+      const runner = await ensureRunner();
+      await runner.launch(taskId, params);
+    });
+    ipcMain.handle("shell:pickFile", async (_event, extensions?: string[]) => {
+      const result = await dialog.showOpenDialog(window, {
+        properties: ["openFile"],
+        filters: extensions?.length ? [{ name: "*", extensions }] : undefined,
+      });
+      return result.canceled ? null : (result.filePaths[0] ?? null);
+    });
+
     app.on("before-quit", () => void adapter.stop().catch(() => {}));
 
     try {

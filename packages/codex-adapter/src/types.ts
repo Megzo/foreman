@@ -123,10 +123,19 @@ export interface AgentMessageDeltaNotification extends ItemScope {
   delta: string;
 }
 
+/** schema: V2TurnCompletedNotification__TurnStatus. */
+export type TurnStatus = "completed" | "interrupted" | "failed" | "inProgress";
+
+/** schema: V2TurnCompletedNotification — { threadId, turn: { id, status, error?, ... } }. */
 export interface TurnCompletedNotification {
   threadId?: string;
-  turnId?: string;
-  usage?: unknown;
+  turn?: {
+    id?: string;
+    status?: TurnStatus;
+    /** Only populated when status is "failed". */
+    error?: { message: string; additionalDetails?: string | null } | null;
+    [key: string]: unknown;
+  };
   [key: string]: unknown;
 }
 

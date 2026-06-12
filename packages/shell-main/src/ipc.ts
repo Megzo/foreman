@@ -39,6 +39,20 @@ export type BootState =
   | { ok: true; manifest: AppManifest; shellVersion: string }
   | { ok: false; error: string };
 
+/** The values a submitted param form collects, keyed by field id (FR-1.3). */
+export type TaskParamValues = Record<string, string | number | boolean>;
+
+/** A run's terminal state (FR-4.6 — "cancelled" joins in Phase 6). */
+export type RunTerminalStatus = "success" | "failed";
+
+/** The task-run event stream the running view renders (Phase 4). */
+export type TaskEvent =
+  | { type: "runStarted"; taskId: string }
+  | { type: "itemStarted"; itemType: string }
+  | { type: "itemCompleted"; itemType: string }
+  | { type: "agentDelta"; text: string }
+  | { type: "finished"; status: RunTerminalStatus; errorMessage?: string };
+
 export interface ShellApi {
   getBootState(): Promise<BootState>;
   /** Subscribe to auth-state changes; the current state is replayed on subscribe. */
@@ -47,4 +61,10 @@ export interface ShellApi {
   startLogin(type: "chatgpt" | "chatgptDeviceCode"): Promise<void>;
   cancelLogin(): Promise<void>;
   logout(): Promise<void>;
+  /** Provision (if needed) and start the task's skill turn (FR-4.1). */
+  launchTask(taskId: string, params: TaskParamValues): Promise<void>;
+  /** Subscribe to the task-run event stream. */
+  onTaskEvent(handler: (event: TaskEvent) => void): () => void;
+  /** Native file-picker for "file" form fields; null when the user cancels. */
+  pickFile(extensions?: string[]): Promise<string | null>;
 }

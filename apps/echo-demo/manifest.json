@@ -12,6 +12,7 @@
       "accent": "#2da44e"
     }
   },
+  "sandbox": "workspace-write",
   "tasks": [
     {
       "id": "echo",
@@ -20,7 +21,21 @@
         "hu": "Kiír egy üzenetet, és bemutatja, hogyan fut egy feladat.",
         "en": "Echoes a message to demonstrate how a task runs."
       },
-      "skill": { "name": "echo", "path": "skill/SKILL.md" }
+      "skill": { "name": "echo", "path": "skill/SKILL.md" },
+      "params": [
+        {
+          "id": "message",
+          "type": "text",
+          "label": { "hu": "Üzenet", "en": "Message" },
+          "required": true
+        },
+        {
+          "id": "uppercase",
+          "type": "checkbox",
+          "label": { "hu": "Nagybetűsítés", "en": "Uppercase" },
+          "default": false
+        }
+      ]
     }
   ]
 }

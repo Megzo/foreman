@@ -11,6 +11,9 @@
 //                setupStart runs, then ready (otherwise happy)
 //   crlf         happy, but every line is CRLF-terminated (codex.exe wire risk)
 //   signed-out   happy, but account/read reports no account until a login runs
+//   echo-input   turn echoes the received turn/start input back as one delta
+//                (lets tests assert what the client actually sent)
+//   turn-fails   turn streams one delta, then completes with status "failed"
 //
 // The peer enforces protocol order: any request before `initialize` +
 // `initialized` (or an initialize without experimentalApi) gets an error
@@ -21,6 +24,7 @@ const scenario = process.argv[2] ?? "happy";
 let initializeSeen = false;
 let initialized = false;
 let signedIn = scenario !== "signed-out";
+let threadStarted = false;
 let pendingLoginId = null;
 let sandboxConfigured = scenario !== "sandbox-setup";
 let nextServerRequestId = 9000;
@@ -40,7 +44,14 @@ const sendServerRequest = (method, params, onResponse) => {
 
 const SCOPE = { threadId: "thread-1", turnId: "turn-1", itemId: "item-1" };
 
-function runTurn() {
+// Schema-shaped turn/completed (V2TurnCompletedNotification: {threadId, turn}).
+const completeTurn = (status = "completed", error = null) =>
+  notify("turn/completed", {
+    threadId: SCOPE.threadId,
+    turn: { id: SCOPE.turnId, status, error, items: [] },
+  });
+
+function runTurn(turnInput) {
   notify("item/started", { ...SCOPE, item: { id: SCOPE.itemId, type: "agentMessage" } });
 
   if (scenario === "die-mid-turn") {
@@ -61,21 +72,25 @@ function runTurn() {
         } else {
           notify("item/agentMessage/delta", { ...SCOPE, delta: JSON.stringify(response.result) });
         }
-        notify("turn/completed", { threadId: SCOPE.threadId, turnId: SCOPE.turnId });
+        completeTurn();
       },
     );
     return;
   }
 
-  for (const delta of ["SPIKE", "_", "OK"]) {
+  if (scenario === "turn-fails") {
+    notify("item/agentMessage/delta", { ...SCOPE, delta: "starting " });
+    completeTurn("failed", { message: "mock model exploded" });
+    return;
+  }
+
+  const deltas =
+    scenario === "echo-input" ? [JSON.stringify(turnInput ?? [])] : ["SPIKE", "_", "OK"];
+  for (const delta of deltas) {
     notify("item/agentMessage/delta", { ...SCOPE, delta });
   }
-  notify("item/completed", { ...SCOPE, item: { id: SCOPE.itemId, type: "agentMessage", text: "SPIKE_OK" } });
-  notify("turn/completed", {
-    threadId: SCOPE.threadId,
-    turnId: SCOPE.turnId,
-    usage: { inputTokens: 1, outputTokens: 2 },
-  });
+  notify("item/completed", { ...SCOPE, item: { id: SCOPE.itemId, type: "agentMessage", text: deltas.join("") } });
+  completeTurn();
 }
 
 function handleRequest({ id, method, params }) {
@@ -132,10 +147,14 @@ function handleRequest({ id, method, params }) {
         requiresOpenaiAuth: !signedIn,
       });
     case "thread/start":
+      threadStarted = true;
       return respond(id, { thread: { id: SCOPE.threadId } });
     case "turn/start":
+      if (!threadStarted) {
+        return respondError(id, -32000, "turn/start before thread/start");
+      }
       respond(id, { turn: { id: SCOPE.turnId } });
-      runTurn();
+      runTurn(params?.input);
       return;
     default:
       return respondError(id, -32601, `mock peer: unhandled method ${method}`);

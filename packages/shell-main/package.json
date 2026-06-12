@@ -17,7 +17,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "dev": "electron-vite dev",
-    "dev:mock": "FOREMAN_MOCK_PEER=1 electron-vite dev"
+    "dev:mock": "FOREMAN_MOCK_PEER=1 electron-vite dev",
+    "build:app": "electron-vite build"
   },
   "dependencies": {
     "@foreman/codex-adapter": "workspace:*"

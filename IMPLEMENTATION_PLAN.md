@@ -95,7 +95,9 @@ Repo layout (PRD Open Q7): pnpm workspace in this directory, beside `t3code/` (g
 
 ---
 
-## Phase 4: First task end-to-end (echo-demo)
+## Phase 4: First task end-to-end (echo-demo) — ✅ COMPLETE (2026-06-12)
+
+> Done: manifest gained `tasks[].params` (five FR-1.3 field types, validated naming the field) + top-level `sandbox`; `WorkspaceProvisioner` (skill dirs → `CODEX_HOME/skills/<name>/`, `provision-state.json`, idempotent per bundle version); `TaskRunner` (one run at a time, thread/start→turn/start with `{type:"skill"}` + params-JSON text item, TaskEvent stream, success/failed from schema-shaped `turn.status`, hardcoded auto-deny approvals until Phase 5); IPC additions `launchTask`/`onTaskEvent`/`pickFile` (native dialog stays in main); renderer `ParamForm` + `RunView` (canned feed lines, reasoning collapsed to "Gondolkodik…") + `TaskScreen` wired from the Home launcher card; echo-demo `skill/SKILL.md` + params. Mock peer: schema-accurate `turn/completed` (`{threadId, turn:{id,status,error}}`), thread-before-turn enforcement, `echo-input`/`turn-fails` scenarios. First Playwright-Electron E2E (`pnpm e2e`, mock peer, isolated `FOREMAN_USER_DATA`): login→launcher→form→streamed run→success→back. 72 vitest tests + e2e + `pnpm typecheck`/`build`/`smoke` (real codex SPIKE_OK) all green. Fixed: dev fixture paths now resolve via `import.meta.dirname`, not `app.getAppPath()` (broke under direct `electron out/main/main.js` launch). Carry-forward: the manual real-codex GUI run (`pnpm dev`, echo task → `result.txt` in the workspace) needs Peter at a signed-in browser, like Phase 3's walk-through.
 
 **Goal:** Clicking echo-demo's launcher renders a parameter form from the manifest, and submitting it runs a real skill-invoking turn: workspace gets provisioned, the skill is discovered, agent output streams into the running view, and the run ends in a success state. The PRD's core tracer bullet.
 

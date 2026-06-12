@@ -2,6 +2,8 @@ node_modules/
 dist/
 out/
 t3code/
+test-results/
+playwright-report/
 *.log
 *.swp
 .claude/gstack/

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import type { AccountInfo, AppManifest, ShellApi } from "@foreman/shell-main/ipc";
+import type { AccountInfo, AppManifest, ManifestTask, ShellApi } from "@foreman/shell-main/ipc";
+import { TaskScreen } from "./Task.js";
 import { localized, t } from "../t.js";
 
 export function Home({
@@ -14,6 +15,13 @@ export function Home({
   api: ShellApi;
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [activeTask, setActiveTask] = useState<ManifestTask | undefined>();
+
+  if (activeTask) {
+    return (
+      <TaskScreen task={activeTask} api={api} onBack={() => setActiveTask(undefined)} />
+    );
+  }
 
   return (
     <section className="home">
@@ -41,7 +49,12 @@ export function Home({
       ) : null}
       <div className="launchers">
         {manifest.tasks.map((task) => (
-          <button type="button" key={task.id} className="launcher-card" disabled>
+          <button
+            type="button"
+            key={task.id}
+            className="launcher-card"
+            onClick={() => setActiveTask(task)}
+          >
             <strong>{localized(task.label)}</strong>
             {task.description ? <span>{localized(task.description)}</span> : null}
           </button>

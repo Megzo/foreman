@@ -11,10 +11,12 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit && tsc --noEmit -p packages/shell-renderer/tsconfig.json",
     "foreman-dev": "tsx tools/foreman-dev.ts",
-    "smoke": "tsx tools/foreman-dev.ts chat \"Reply with exactly: SPIKE_OK\""
+    "smoke": "tsx tools/foreman-dev.ts chat \"Reply with exactly: SPIKE_OK\"",
+    "e2e": "pnpm --filter @foreman/shell-main run build:app && playwright test"
   },
   "devDependencies": {
     "@foreman/codex-adapter": "workspace:*",
+    "@playwright/test": "^1.60.0",
     "@types/node": "^22.15.0",
     "tsx": "^4.19.0",
     "typescript": "^5.8.0",

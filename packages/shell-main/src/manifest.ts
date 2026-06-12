@@ -34,11 +34,43 @@ function validateSkillRef(value: unknown, field: string): void {
   requireString(skill.path, `${field}.path`);
 }
 
+const FIELD_TYPES = ["file", "text", "number", "select", "checkbox"] as const;
+
+function validateFormField(value: unknown, field: string): void {
+  const param = requireObject(value, field);
+  requireString(param.id, `${field}.id`);
+  const type = requireString(param.type, `${field}.type`);
+  if (!(FIELD_TYPES as readonly string[]).includes(type)) {
+    throw new ManifestError(`${field}.type`, `expected one of ${FIELD_TYPES.join(", ")}`);
+  }
+  requireString(requireObject(param.label, `${field}.label`).hu, `${field}.label.hu`);
+  if (type === "select") {
+    const options = param.options;
+    if (!Array.isArray(options) || options.length === 0) {
+      throw new ManifestError(`${field}.options`, "select fields require a non-empty options array");
+    }
+    options.forEach((option, index) => {
+      const opt = requireObject(option, `${field}.options[${index}]`);
+      requireString(opt.value, `${field}.options[${index}].value`);
+      requireString(
+        requireObject(opt.label, `${field}.options[${index}].label`).hu,
+        `${field}.options[${index}].label.hu`,
+      );
+    });
+  }
+}
+
 function validateTask(value: unknown, field: string): void {
   const task = requireObject(value, field);
   requireString(task.id, `${field}.id`);
   requireString(requireObject(task.label, `${field}.label`).hu, `${field}.label.hu`);
   validateSkillRef(task.skill, `${field}.skill`);
+  if (task.params !== undefined) {
+    if (!Array.isArray(task.params)) {
+      throw new ManifestError(`${field}.params`, "expected an array");
+    }
+    task.params.forEach((param, index) => validateFormField(param, `${field}.params[${index}]`));
+  }
 }
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
@@ -71,6 +103,9 @@ function validateManifest(value: unknown): AppManifest {
     if (colors[optional] !== undefined) {
       requireColor(colors[optional], `branding.colors.${optional}`);
     }
+  }
+  if (root.sandbox !== undefined && root.sandbox !== "read-only" && root.sandbox !== "workspace-write") {
+    throw new ManifestError("sandbox", 'expected "read-only" or "workspace-write"');
   }
   const tasks = root.tasks;
   if (!Array.isArray(tasks) || tasks.length === 0) {
