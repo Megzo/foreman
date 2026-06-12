@@ -22,6 +22,10 @@
 //   user-input   turn sends an item/tool/requestUserInput mid-turn, echoes
 //                the client's answers back as a delta, then completes
 //
+// thread/resume is handled in every scenario: it re-attaches the one mock
+// thread ("thread-1") and rejects any other id, so a resumed turn proves the
+// client passed the stored thread id (FR-7.2).
+//
 // The peer enforces protocol order: any request before `initialize` +
 // `initialized` (or an initialize without experimentalApi) gets an error
 // response, so a client with a broken handshake observably fails.
@@ -197,6 +201,14 @@ function handleRequest({ id, method, params }) {
         requiresOpenaiAuth: !signedIn,
       });
     case "thread/start":
+      threadStarted = true;
+      return respond(id, { thread: { id: SCOPE.threadId } });
+    case "thread/resume":
+      // Re-attach an existing thread by id (FR-7.2). Reject any other id so a
+      // completed resumed turn proves the client passed the stored thread id.
+      if (params?.threadId !== SCOPE.threadId) {
+        return respondError(id, -32000, `thread/resume unknown threadId=${params?.threadId}`);
+      }
       threadStarted = true;
       return respond(id, { thread: { id: SCOPE.threadId } });
     case "turn/start":

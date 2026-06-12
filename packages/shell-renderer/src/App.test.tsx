@@ -59,4 +59,22 @@ describe("screen state machine over the IPC contract (Phase 3)", () => {
 
     expect(shell.calls).toEqual(["startLogin:chatgpt"]);
   });
+
+  test("a codex-process death shows a calm restart banner with one-click resume (FR-2.5)", async () => {
+    const shell = makeFakeShell();
+    render(<App api={shell.api} />);
+    act(() =>
+      shell.pushAuth({
+        status: "agentError",
+        message: "codex process exited unexpectedly (code=1)",
+      }),
+    );
+
+    expect(await screen.findByTestId("restart-banner")).toBeTruthy();
+    // Reassuring wording — never the raw crash line in the user's face.
+    expect(screen.getByText(/háttérszolgáltatás/)).toBeTruthy();
+
+    (await screen.findByRole("button", { name: /Folytatás/ })).click();
+    expect(shell.calls).toContain("restartAgent");
+  });
 });

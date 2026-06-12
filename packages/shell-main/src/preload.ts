@@ -40,6 +40,11 @@ const api: ShellApi = {
   answerUserInput: (requestId, answers) =>
     ipcRenderer.invoke("shell:answerUserInput", requestId, answers),
   pickFile: (extensions) => ipcRenderer.invoke("shell:pickFile", extensions),
+  listRuns: () => ipcRenderer.invoke("shell:listRuns"),
+  findResumable: () => ipcRenderer.invoke("shell:findResumable"),
+  resumeRun: (runId) => ipcRenderer.invoke("shell:resumeRun", runId),
+  dismissResume: (runId) => ipcRenderer.invoke("shell:dismissResume", runId),
+  restartAgent: () => ipcRenderer.invoke("shell:restartAgent"),
 };
 
 contextBridge.exposeInMainWorld("foreman", api);

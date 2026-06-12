@@ -24,13 +24,16 @@ export function TaskScreen({
   task,
   api,
   onBack,
+  resumeRunId,
 }: {
   task: ManifestTask;
   api: ShellApi;
   onBack: () => void;
+  /** When set, skip the param form and resume this crashed run instead (FR-7.2). */
+  resumeRunId?: string;
 }) {
   const [events, setEvents] = useState<TaskEvent[]>([]);
-  const [launched, setLaunched] = useState(false);
+  const [launched, setLaunched] = useState(resumeRunId !== undefined);
   const [chatMessages, setChatMessages] = useState<string[]>([]);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [userInput, setUserInput] = useState<UserInputRequestPayload | undefined>();
@@ -40,6 +43,11 @@ export function TaskScreen({
     [api],
   );
   useEffect(() => api.onUserInputRequest(setUserInput), [api]);
+  // Resume picks up where a crash left off: re-attach the stored thread and
+  // stream into the same run, with no form (FR-7.2).
+  useEffect(() => {
+    if (resumeRunId !== undefined) void api.resumeRun(resumeRunId);
+  }, [api, resumeRunId]);
 
   if (!launched) {
     return (

@@ -267,6 +267,23 @@ describe("process death (FR-2.5, detection half)", () => {
     await expect(adapter.readAccount()).rejects.toThrow(/not started/i);
   });
 
+  test("after a death the adapter restarts and resumes the thread (FR-2.5 recovery half)", async () => {
+    const adapter = makeAdapter("die-mid-turn");
+    const errorEvent = new Promise<void>((resolve) => adapter.on("error", () => resolve()));
+
+    await adapter.start();
+    const thread = await adapter.startThread({ cwd: "/tmp" });
+    await adapter.startTurn({ threadId: thread.threadId, input: [{ type: "text", text: "go" }] });
+    await errorEvent;
+    expect(adapter.isRunning()).toBe(false);
+
+    // The one-click "Restart": re-spawn the agent, then resume the same thread.
+    await adapter.start();
+    expect(adapter.isRunning()).toBe(true);
+    const resumed = await adapter.resumeThread(thread.threadId);
+    expect(resumed.threadId).toBe("thread-1");
+  });
+
   test("a clean stop() does not emit an error event", async () => {
     const adapter = makeAdapter();
     const errors: unknown[] = [];

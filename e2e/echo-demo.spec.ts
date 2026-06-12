@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from "@playwright/test";
@@ -7,8 +7,9 @@ import { _electron as electron, expect, test, type ElectronApplication, type Pag
  * Shell flows end to end against the mock peer (no tokens, no network).
  * Phase 4: branded login -> home -> launcher -> param form -> streamed run
  * view -> success state. Phase 6: chat steering, cancel-with-confirmation and
- * the requestUserInput modal. Requires `electron-vite build` output (pnpm e2e
- * does this) and a display (WSLg/X11).
+ * the requestUserInput modal. Phase 7: kill mid-run -> relaunch -> resume.
+ * Requires `electron-vite build` output (pnpm e2e does this) and a display
+ * (WSLg/X11).
  */
 
 const MAIN_ENTRY = resolve(import.meta.dirname, "../packages/shell-main/out/main/main.js");
@@ -16,18 +17,20 @@ const MAIN_ENTRY = resolve(import.meta.dirname, "../packages/shell-main/out/main
 let app: ElectronApplication;
 let window: Page;
 
-async function launch(scenario?: string): Promise<void> {
+/** Launch; pass a userData dir to share state across relaunch (else isolated). */
+async function launch(scenario?: string, userData?: string): Promise<string> {
+  const dir = userData ?? mkdtempSync(join(tmpdir(), "foreman-e2e-"));
   app = await electron.launch({
     args: [MAIN_ENTRY],
     env: {
       ...process.env,
       FOREMAN_MOCK_PEER: "1",
       ...(scenario ? { FOREMAN_MOCK_SCENARIO: scenario } : {}),
-      // Isolate userData (workspace, provisioning state) per run.
-      FOREMAN_USER_DATA: mkdtempSync(join(tmpdir(), "foreman-e2e-")),
+      FOREMAN_USER_DATA: dir,
     },
   });
   window = await app.firstWindow();
+  return dir;
 }
 
 /** Home -> launcher -> form -> running view (scenarios that boot signed in). */
@@ -105,4 +108,42 @@ test("an agent question renders as a native form and the answer reaches the skil
 
   await expect(window.getByTestId("run-message")).toContainText("Informális");
   await expect(window.getByTestId("run-success")).toBeVisible();
+});
+
+test("kill mid-run, relaunch, resume continues to success and the run is in history (Phase 7, FR-7.2/7.3)", async () => {
+  // First boot: start a run whose turn stays open (steerable), so killing the
+  // app leaves a persisted "running" record with its thread id — exactly the
+  // crash the resume offer recovers from.
+  const userData = await launch("steerable");
+  await startEchoRun("szia");
+
+  // Wait for the persisted record to carry its thread id (FR-7.1 artifact) —
+  // the resume precondition — then hard-kill the app, mid-run.
+  const indexFile = join(userData, "sessions", "index.json");
+  await expect
+    .poll(() => {
+      try {
+        const index = JSON.parse(readFileSync(indexFile, "utf8")) as {
+          runs: Array<{ status: string; threadId?: string }>;
+        };
+        return index.runs.some((run) => run.status === "running" && run.threadId !== undefined);
+      } catch {
+        return false;
+      }
+    })
+    .toBe(true);
+  await app.close();
+
+  // Relaunch on the SAME userData. The peer now completes turns ("happy"), so
+  // the resumed turn runs to success.
+  await launch("happy", userData);
+
+  // The crashed run is offered for resume; accepting continues it to success.
+  await window.getByRole("button", { name: /Folytatás/ }).click();
+  await expect(window.getByTestId("run-message")).toHaveText("SPIKE_OK");
+  await expect(window.getByTestId("run-success")).toBeVisible();
+
+  // Back on the home screen the run now appears in history as finished.
+  await window.getByRole("button", { name: /Vissza/ }).click();
+  await expect(window.getByTestId("run-history")).toContainText("Kész");
 });

@@ -7,6 +7,7 @@ import type {
 import type { TaskEvent, TaskParamValues } from "./ipc.js";
 import type { AppManifest } from "./manifest-types.js";
 import { PolicyEngine, type PolicyDecisionRecord } from "./policy.js";
+import type { SessionStore } from "./session-store.js";
 import type { ProvisionedWorkspace } from "./workspace.js";
 
 export interface TaskRunnerOptions {
@@ -21,6 +22,12 @@ export interface TaskRunnerOptions {
    * runner can never hang on a hidden dialog.
    */
   onUserInput?: (request: UserInputRequest) => UserInputResponse | Promise<UserInputResponse>;
+  /**
+   * Persists the run lifecycle and transcript (FR-7.1). Optional so headless
+   * tests can drive the runner without a store; when present, every run is
+   * recorded and becomes resumable after a crash (FR-7.2).
+   */
+  store?: SessionStore;
 }
 
 /** The no-handler fallback: first option (or "ok" for free-text questions). */
@@ -54,17 +61,21 @@ export class TaskRunner {
   private readonly adapter: AgentAdapter;
   private readonly manifest: AppManifest;
   private readonly workspace: ProvisionedWorkspace;
+  private readonly store: SessionStore | undefined;
   private readonly handlers = new Set<(event: TaskEvent) => void>();
   private running = false;
   /** The active run's thread; outlives the turn so follow-up chat can reuse it. */
   private threadId: string | undefined;
   /** Set while a turn is in progress — chat steers it; cleared on turn end. */
   private turnId: string | undefined;
+  /** The persisted run id, set on launch/resume; events append to its transcript. */
+  private runId: string | undefined;
 
   constructor(options: TaskRunnerOptions) {
     this.adapter = options.adapter;
     this.manifest = options.manifest;
     this.workspace = options.workspace;
+    this.store = options.store;
 
     const policy = new PolicyEngine({
       policy: this.manifest.policy,
@@ -124,33 +135,29 @@ export class TaskRunner {
     return this.running;
   }
 
+  /** The run the shell would resume after a codex-process death (FR-2.5). */
+  activeRunId(): string | undefined {
+    return this.runId;
+  }
+
   async launch(taskId: string, params: TaskParamValues): Promise<void> {
     if (this.running) {
       throw new Error("a task run is already in progress (egy futás már folyamatban van)");
     }
-    const task = this.manifest.tasks.find((candidate) => candidate.id === taskId);
-    if (!task) {
-      throw new Error(`unknown task id: ${taskId}`);
-    }
-    const skillPath = this.workspace.skillPaths[task.skill.name];
-    if (!skillPath) {
-      throw new Error(`skill not provisioned: ${task.skill.name}`);
-    }
+    const { task, skillPath } = this.resolveTask(taskId);
 
     this.running = true;
+    this.runId = this.store?.createRun({ taskId, params }).runId;
     this.emit({ type: "runStarted", taskId });
     try {
       const thread = await this.adapter.startThread({
         cwd: this.workspace.workspaceDir,
         sandbox: this.manifest.sandbox ?? "workspace-write",
       });
-      this.threadId = thread.threadId;
+      this.bindThread(thread.threadId);
       const turn = await this.adapter.startTurn({
         threadId: thread.threadId,
-        input: [
-          { type: "skill", name: task.skill.name, path: skillPath },
-          { type: "text", text: paramsText(params) },
-        ],
+        input: this.skillInput(task, skillPath, params),
       });
       // turn/completed may already have been processed while awaiting the
       // turn/start response (both can arrive in one stdio chunk) — don't
@@ -160,6 +167,68 @@ export class TaskRunner {
       this.finish({ type: "finished", status: "failed", errorMessage: (error as Error).message });
       throw error;
     }
+  }
+
+  /**
+   * Resume a crashed run (FR-7.2): re-attach its stored thread via thread/resume
+   * and re-invoke the skill turn on it. The skill's own checkpointing makes the
+   * re-run cheap (it skips finished work); the events stream into the same run
+   * record so history and the transcript stay continuous.
+   */
+  async resume(runId: string): Promise<void> {
+    if (this.running) {
+      throw new Error("a task run is already in progress (egy futás már folyamatban van)");
+    }
+    const record = this.store?.getRun(runId);
+    if (!record?.threadId) {
+      throw new Error(`run not resumable (nem folytatható): ${runId}`);
+    }
+    const { task, skillPath } = this.resolveTask(record.taskId);
+
+    this.running = true;
+    this.runId = runId;
+    this.emit({ type: "runStarted", taskId: record.taskId });
+    try {
+      const thread = await this.adapter.resumeThread(record.threadId);
+      this.bindThread(thread.threadId);
+      const turn = await this.adapter.startTurn({
+        threadId: thread.threadId,
+        input: this.skillInput(task, skillPath, record.params),
+      });
+      if (this.running) this.turnId = turn.turnId;
+    } catch (error) {
+      this.finish({ type: "finished", status: "failed", errorMessage: (error as Error).message });
+      throw error;
+    }
+  }
+
+  private resolveTask(taskId: string): { task: AppManifest["tasks"][number]; skillPath: string } {
+    const task = this.manifest.tasks.find((candidate) => candidate.id === taskId);
+    if (!task) {
+      throw new Error(`unknown task id: ${taskId}`);
+    }
+    const skillPath = this.workspace.skillPaths[task.skill.name];
+    if (!skillPath) {
+      throw new Error(`skill not provisioned: ${task.skill.name}`);
+    }
+    return { task, skillPath };
+  }
+
+  private skillInput(
+    task: AppManifest["tasks"][number],
+    skillPath: string,
+    params: TaskParamValues,
+  ) {
+    return [
+      { type: "skill" as const, name: task.skill.name, path: skillPath },
+      { type: "text" as const, text: paramsText(params) },
+    ];
+  }
+
+  /** Record the run's thread, both in memory and (for resume) in the store. */
+  private bindThread(threadId: string): void {
+    this.threadId = threadId;
+    if (this.runId) this.store?.recordThread(this.runId, threadId);
   }
 
   /**
@@ -200,10 +269,15 @@ export class TaskRunner {
   private finish(event: Extract<TaskEvent, { type: "finished" }>): void {
     this.running = false;
     this.turnId = undefined;
+    if (this.runId) this.store?.finishRun(this.runId, event.status, event.errorMessage);
     this.emit(event);
   }
 
   private emit(event: TaskEvent): void {
+    // Notify the UI first, then persist — the transcript must never gate the
+    // sub-100ms delta latency (FR-2.4); a delta lost to a crash before its
+    // append is cosmetic, since resume replays the skill anyway.
     for (const handler of this.handlers) handler(event);
+    if (this.runId) this.store?.appendEvent(this.runId, event);
   }
 }

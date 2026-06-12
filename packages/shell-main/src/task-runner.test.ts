@@ -1,8 +1,12 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CodexAdapter } from "@foreman/codex-adapter";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import type { TaskEvent } from "./ipc.js";
 import type { AppManifest } from "./manifest-types.js";
+import { SessionStore } from "./session-store.js";
 import { TaskRunner } from "./task-runner.js";
 import type { ProvisionedWorkspace } from "./workspace.js";
 
@@ -59,8 +63,16 @@ function finished(events: TaskEvent[]) {
     | undefined;
 }
 
+const storeDirs: string[] = [];
+function makeStore(): SessionStore {
+  const dir = mkdtempSync(join(tmpdir(), "foreman-runner-sessions-"));
+  storeDirs.push(dir);
+  return new SessionStore(dir);
+}
+
 afterEach(async () => {
   await Promise.all(adapters.splice(0).map((adapter) => adapter.stop().catch(() => {})));
+  for (const dir of storeDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
 describe("TaskRunner launch path (FR-4.1)", () => {
@@ -290,6 +302,61 @@ describe("TaskRunner user-input requests (FR-4.4, Phase 6)", () => {
       .map((event) => (event as { text: string }).text)
       .join("");
     expect(JSON.parse(echoed)).toEqual({ answers: { tone: { answers: ["Formális"] } } });
+  });
+});
+
+describe("TaskRunner persistence and resume (FR-7.1/7.2, Phase 7)", () => {
+  test("a launched run is recorded with its thread id, transcript and final status", async () => {
+    const store = makeStore();
+    const { runner, events } = makeRunner("happy", MANIFEST, { store });
+    await startAdapter();
+
+    await runner.launch("echo", { message: "ok" });
+    await vi.waitFor(() => expect(finished(events)).toBeTruthy());
+
+    const runs = store.listRuns();
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toMatchObject({
+      taskId: "echo",
+      params: { message: "ok" },
+      threadId: "thread-1",
+      status: "success",
+    });
+    // The transcript captured the same stream the running view saw, in order.
+    const transcript = store.readTranscript(runs[0]!.runId);
+    expect(transcript[0]).toEqual({ type: "runStarted", taskId: "echo" });
+    expect(transcript.some((event) => event.type === "agentDelta")).toBe(true);
+    expect(transcript.at(-1)).toEqual({ type: "finished", status: "success" });
+  });
+
+  test("resume re-attaches the stored thread via thread/resume and continues into the same run record", async () => {
+    const store = makeStore();
+    // A prior app died after thread/start: the record stays "running" with its
+    // thread id ("thread-1" is the mock peer's thread). The peer's thread/resume
+    // rejects any other id, so a completed run proves the stored id went out.
+    const stale = store.createRun({ taskId: "echo", params: { message: "ok" } });
+    store.recordThread(stale.runId, "thread-1");
+
+    const { runner, events } = makeRunner("happy", MANIFEST, { store });
+    await startAdapter();
+
+    await runner.resume(stale.runId);
+    await vi.waitFor(() => expect(finished(events)).toBeTruthy());
+
+    expect(finished(events)).toEqual({ type: "finished", status: "success" });
+    // Same record — no new run was created — and it is now terminal.
+    expect(store.listRuns()).toHaveLength(1);
+    expect(store.getRun(stale.runId)?.status).toBe("success");
+  });
+
+  test("resuming an unknown or thread-less run rejects instead of starting blind", async () => {
+    const store = makeStore();
+    const noThread = store.createRun({ taskId: "echo", params: {} });
+    const { runner } = makeRunner("happy", MANIFEST, { store });
+    await startAdapter();
+
+    await expect(runner.resume("does-not-exist")).rejects.toThrow(/resum/i);
+    await expect(runner.resume(noThread.runId)).rejects.toThrow(/resum/i);
   });
 });
 

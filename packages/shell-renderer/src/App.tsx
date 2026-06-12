@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { AuthState, BootState, ShellApi } from "@foreman/shell-main/ipc";
 import { Home } from "./screens/Home.js";
 import { Login } from "./screens/Login.js";
+import { RestartBanner } from "./screens/RestartBanner.js";
 import { StartupError } from "./screens/StartupError.js";
 
 /** Branding-driven theme tokens; the shell must look like the client's app. */
@@ -48,7 +49,10 @@ export function App({ api }: { api: ShellApi }) {
 
   return (
     <main className="app" style={themeStyle(boot)}>
-      {auth.status === "signedIn" ? (
+      {auth.status === "agentError" ? (
+        // The codex process died (FR-2.5) — a calm banner over everything.
+        <RestartBanner message={auth.message} api={api} />
+      ) : auth.status === "signedIn" ? (
         <Home
           manifest={boot.manifest}
           account={auth.account}

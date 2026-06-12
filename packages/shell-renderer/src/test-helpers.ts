@@ -2,6 +2,7 @@ import type {
   AppManifest,
   AuthState,
   BootState,
+  RunRecord,
   ShellApi,
   TaskEvent,
   UserInputAnswers,
@@ -43,6 +44,9 @@ export interface FakeShell {
   launches: Array<{ taskId: string; params: Record<string, string | number | boolean> }>;
   /** Each answerUserInput call: the request id and the protocol-shaped answers. */
   userInputAnswers: Array<{ requestId: number; answers: UserInputAnswers }>;
+  /** Seed the history list and the startup resume offer (Phase 7). */
+  runs: RunRecord[];
+  resumable: RunRecord | undefined;
 }
 
 export function makeFakeShell(boot: BootState = { ok: true, manifest: TEST_MANIFEST, shellVersion: "0.0.1" }): FakeShell {
@@ -53,10 +57,12 @@ export function makeFakeShell(boot: BootState = { ok: true, manifest: TEST_MANIF
   const calls: string[] = [];
   const launches: FakeShell["launches"] = [];
   const userInputAnswers: FakeShell["userInputAnswers"] = [];
-  return {
+  const shell: FakeShell = {
     calls,
     launches,
     userInputAnswers,
+    runs: [],
+    resumable: undefined,
     pushAuth(state) {
       current = state;
       for (const handler of handlers) handler(state);
@@ -106,6 +112,18 @@ export function makeFakeShell(boot: BootState = { ok: true, manifest: TEST_MANIF
         userInputAnswers.push({ requestId, answers });
       },
       pickFile: async () => "/home/user/picked.epub",
+      listRuns: async () => shell.runs,
+      findResumable: async () => shell.resumable,
+      resumeRun: async (runId) => {
+        calls.push(`resumeRun:${runId}`);
+      },
+      dismissResume: async (runId) => {
+        calls.push(`dismissResume:${runId}`);
+      },
+      restartAgent: async () => {
+        calls.push("restartAgent");
+      },
     },
   };
+  return shell;
 }

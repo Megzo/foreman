@@ -12,6 +12,7 @@ import type {
   UserInputRequestPayload,
 } from "./ipc.js";
 import { ManifestLoader } from "./manifest.js";
+import { SessionStore } from "./session-store.js";
 import { TaskRunner } from "./task-runner.js";
 import { WorkspaceProvisioner } from "./workspace.js";
 
@@ -108,6 +109,9 @@ async function boot(): Promise<void> {
     const decisionLog = new DecisionLog(
       join(app.getPath("userData"), "logs", "policy-decisions.jsonl"),
     );
+    // Persisted run history + resume index (FR-7.1). Survives restarts; a run
+    // left "running" by an app crash is offered for resume on next launch.
+    const sessionStore = new SessionStore(join(app.getPath("userData"), "sessions"));
     // requestUserInput correlation (FR-4.4): each agent question goes to the
     // renderer with a requestId; the modal's answer resolves the pending
     // promise, which becomes the JSON-RPC response back to codex.
@@ -127,6 +131,7 @@ async function boot(): Promise<void> {
             adapter,
             manifest,
             workspace,
+            store: sessionStore,
             onPolicyDecision: (record) => decisionLog.append(record),
             onUserInput: (request) =>
               new Promise((resolve) => {
@@ -167,6 +172,35 @@ async function boot(): Promise<void> {
         filters: extensions?.length ? [{ name: "*", extensions }] : undefined,
       });
       return result.canceled ? null : (result.filePaths[0] ?? null);
+    });
+
+    // Sessions, history and resume (FR-7.2/7.3).
+    ipcMain.handle("shell:listRuns", () => sessionStore.listRuns());
+    ipcMain.handle("shell:findResumable", () => sessionStore.findResumable() ?? null);
+    ipcMain.handle("shell:resumeRun", async (_event, runId: string) => {
+      const runner = await ensureRunner();
+      await runner.resume(runId);
+    });
+    // Declining the offer finalizes the stale run so it is not re-offered.
+    ipcMain.handle("shell:dismissResume", (_event, runId: string) =>
+      sessionStore.finishRun(runId, "cancelled"),
+    );
+    // FR-2.5 one-click restart: re-spawn codex, restore the signed-in UI, then
+    // resume the run the death interrupted via thread/resume.
+    ipcMain.handle("shell:restartAgent", async () => {
+      await adapter.start();
+      await auth.initialize();
+      const runner = await ensureRunner();
+      const runId = runner.activeRunId();
+      if (runId) await runner.resume(runId);
+    });
+
+    // A codex death after boot surfaces as the restart banner (FR-2.5 UI half).
+    adapter.on("error", (payload) => {
+      window.webContents.send("shell:authState", {
+        status: "agentError",
+        message: payload.message,
+      } satisfies AuthState);
     });
 
     app.on("before-quit", () => void adapter.stop().catch(() => {}));

@@ -45,6 +45,28 @@ export type TaskParamValues = Record<string, string | number | boolean>;
 /** A run's terminal state (FR-4.6). */
 export type RunTerminalStatus = "success" | "failed" | "cancelled";
 
+/** A run's persisted status: still running, or one of the terminal states (FR-7.1). */
+export type RunStatus = "running" | RunTerminalStatus;
+
+/**
+ * A persisted task run (FR-7.1) — the unit of the history list and the resume
+ * offer. The rendered transcript is stored separately (one JSONL file per run)
+ * and replayed via the store; this record is the index entry.
+ */
+export interface RunRecord {
+  runId: string;
+  taskId: string;
+  /** The Codex thread, recorded once thread/start returns — required to resume (FR-7.2). */
+  threadId?: string;
+  params: TaskParamValues;
+  status: RunStatus;
+  /** ISO timestamps; createdAt drives the newest-first history ordering. */
+  createdAt: string;
+  updatedAt: string;
+  /** Populated when status is "failed". */
+  errorMessage?: string;
+}
+
 /** The task-run event stream the running view renders (Phase 4). */
 export type TaskEvent =
   | { type: "runStarted"; taskId: string }
@@ -99,4 +121,14 @@ export interface ShellApi {
   answerUserInput(requestId: number, answers: UserInputAnswers): Promise<void>;
   /** Native file-picker for "file" form fields; null when the user cancels. */
   pickFile(extensions?: string[]): Promise<string | null>;
+  /** Past runs for the history list, newest first (FR-7.3). */
+  listRuns(): Promise<RunRecord[]>;
+  /** The in-progress run to offer for resume on startup, if any (FR-7.2). */
+  findResumable(): Promise<RunRecord | undefined>;
+  /** Resume a crashed run via thread/resume, streaming into the same run (FR-7.2). */
+  resumeRun(runId: string): Promise<void>;
+  /** Decline the resume offer; the stale run is finalized so it is not re-offered. */
+  dismissResume(runId: string): Promise<void>;
+  /** One-click agent restart after a codex-process death; resumes the active run (FR-2.5). */
+  restartAgent(): Promise<void>;
 }
