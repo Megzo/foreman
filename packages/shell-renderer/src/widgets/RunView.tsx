@@ -53,7 +53,9 @@ export function RunView({ task, events }: { task: ManifestTask; events: TaskEven
           ? t("Folyamatban…")
           : finished.status === "success"
             ? t("Kész")
-            : t("Sikertelen")}
+            : finished.status === "cancelled"
+              ? t("Megszakítva")
+              : t("Sikertelen")}
       </p>
       <ul data-testid="run-feed" className="run-feed">
         {feed.map((line, index) => (
@@ -74,6 +76,11 @@ export function RunView({ task, events }: { task: ManifestTask; events: TaskEven
       {finished?.status === "failed" ? (
         <p data-testid="run-failed" className="run-terminal failed">
           {t("A feladat nem sikerült.")} {finished.errorMessage ?? ""}
+        </p>
+      ) : null}
+      {finished?.status === "cancelled" ? (
+        <p data-testid="run-cancelled" className="run-terminal cancelled">
+          {t("A feladat megszakítva.")}
         </p>
       ) : null}
     </section>

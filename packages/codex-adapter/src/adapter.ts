@@ -13,6 +13,7 @@ import type {
   StartTurnOptions,
   SteerTurnOptions,
   ThreadRef,
+  TurnRef,
   UserInputRequest,
   UserInputResponse,
 } from "./types.js";
@@ -49,7 +50,7 @@ export interface AgentAdapter {
 
   startThread(options: StartThreadOptions): Promise<ThreadRef>;
   resumeThread(threadId: string): Promise<ThreadRef>;
-  startTurn(options: StartTurnOptions): Promise<void>;
+  startTurn(options: StartTurnOptions): Promise<TurnRef>;
   steerTurn(options: SteerTurnOptions): Promise<void>;
   interruptTurn(options: InterruptTurnOptions): Promise<void>;
 

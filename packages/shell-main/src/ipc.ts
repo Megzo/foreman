@@ -42,8 +42,8 @@ export type BootState =
 /** The values a submitted param form collects, keyed by field id (FR-1.3). */
 export type TaskParamValues = Record<string, string | number | boolean>;
 
-/** A run's terminal state (FR-4.6 — "cancelled" joins in Phase 6). */
-export type RunTerminalStatus = "success" | "failed";
+/** A run's terminal state (FR-4.6). */
+export type RunTerminalStatus = "success" | "failed" | "cancelled";
 
 /** The task-run event stream the running view renders (Phase 4). */
 export type TaskEvent =
@@ -54,6 +54,29 @@ export type TaskEvent =
   /** The policy denied an agent action; the run continues (FR-5.3). */
   | { type: "actionDenied"; kind: "commandExecution" | "fileChange" }
   | { type: "finished"; status: RunTerminalStatus; errorMessage?: string };
+
+/** One selectable option of a user-input question (schema: ToolRequestUserInputOption). */
+export interface UserInputOption {
+  label: string;
+  description?: string;
+}
+
+/** One `item/tool/requestUserInput` question as the modal renders it (FR-4.4). */
+export interface UserInputQuestion {
+  id: string;
+  header?: string;
+  question: string;
+  options?: UserInputOption[] | null;
+}
+
+/** Protocol-shaped answers, keyed by question id (schema: ToolRequestUserInputResponse). */
+export type UserInputAnswers = Record<string, { answers: string[] }>;
+
+/** A pending user-input request pushed from main; answered via answerUserInput. */
+export interface UserInputRequestPayload {
+  requestId: number;
+  questions: UserInputQuestion[];
+}
 
 export interface ShellApi {
   getBootState(): Promise<BootState>;
@@ -67,6 +90,13 @@ export interface ShellApi {
   launchTask(taskId: string, params: TaskParamValues): Promise<void>;
   /** Subscribe to the task-run event stream. */
   onTaskEvent(handler: (event: TaskEvent) => void): () => void;
+  /** Task-scoped chat: steers the in-progress turn, follow-up turn when idle (FR-4.3). */
+  sendChat(text: string): Promise<void>;
+  /** Cancel the running task via turn/interrupt (FR-4.5); the renderer confirms first. */
+  cancelTask(): Promise<void>;
+  /** Subscribe to agent user-input requests; answer each via answerUserInput (FR-4.4). */
+  onUserInputRequest(handler: (request: UserInputRequestPayload) => void): () => void;
+  answerUserInput(requestId: number, answers: UserInputAnswers): Promise<void>;
   /** Native file-picker for "file" form fields; null when the user cancels. */
   pickFile(extensions?: string[]): Promise<string | null>;
 }

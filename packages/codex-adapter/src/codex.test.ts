@@ -87,6 +87,20 @@ describe("turn streaming (FR-2.4)", () => {
     expect(deltas.join("")).toBe("SPIKE_OK");
     expect(eventOrder).toEqual(["itemStarted", "delta", "delta", "delta", "itemCompleted", "turnCompleted"]);
   });
+
+  test("startTurn resolves with the started turn's id — steer and interrupt address it (Phase 6)", async () => {
+    const adapter = makeAdapter();
+
+    await adapter.start();
+    const thread = await adapter.startThread({ cwd: "/tmp" });
+    const turn = await adapter.startTurn({
+      threadId: thread.threadId,
+      input: [{ type: "text", text: "go" }],
+    });
+
+    // schema: V2TurnStartResponse = { turn: { id, status, ... } }
+    expect(turn).toEqual({ turnId: "turn-1" });
+  });
 });
 
 describe("server-request callbacks (FR-2.1)", () => {

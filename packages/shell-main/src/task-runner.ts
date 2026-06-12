@@ -1,4 +1,9 @@
-import type { AgentAdapter, ApprovalResponse } from "@foreman/codex-adapter";
+import type {
+  AgentAdapter,
+  ApprovalResponse,
+  UserInputRequest,
+  UserInputResponse,
+} from "@foreman/codex-adapter";
 import type { TaskEvent, TaskParamValues } from "./ipc.js";
 import type { AppManifest } from "./manifest-types.js";
 import { PolicyEngine, type PolicyDecisionRecord } from "./policy.js";
@@ -10,6 +15,24 @@ export interface TaskRunnerOptions {
   workspace: ProvisionedWorkspace;
   /** Decision-trail sink, wired to the DecisionLog by the shell (FR-5.4). */
   onPolicyDecision?: (record: PolicyDecisionRecord) => void;
+  /**
+   * Answers `item/tool/requestUserInput` — the shell wires this to the native
+   * modal form (FR-4.4). Without it the first option is picked, so a headless
+   * runner can never hang on a hidden dialog.
+   */
+  onUserInput?: (request: UserInputRequest) => UserInputResponse | Promise<UserInputResponse>;
+}
+
+/** The no-handler fallback: first option (or "ok" for free-text questions). */
+function firstOptionAnswers(request: UserInputRequest): UserInputResponse {
+  return {
+    answers: Object.fromEntries(
+      (request.questions ?? []).map((question) => [
+        question.id,
+        { answers: question.options?.length ? [question.options[0]!.label] : ["ok"] },
+      ]),
+    ),
+  };
 }
 
 /** The params text item accompanying the skill input (FR-4.1). */
@@ -33,6 +56,10 @@ export class TaskRunner {
   private readonly workspace: ProvisionedWorkspace;
   private readonly handlers = new Set<(event: TaskEvent) => void>();
   private running = false;
+  /** The active run's thread; outlives the turn so follow-up chat can reuse it. */
+  private threadId: string | undefined;
+  /** Set while a turn is in progress — chat steers it; cleared on turn end. */
+  private turnId: string | undefined;
 
   constructor(options: TaskRunnerOptions) {
     this.adapter = options.adapter;
@@ -55,14 +82,7 @@ export class TaskRunner {
       commandExecutionApproval: (request) =>
         decided("commandExecution", policy.decide("commandExecution", request)),
       fileChangeApproval: (request) => decided("fileChange", policy.decide("fileChange", request)),
-      userInput: (request) => ({
-        answers: Object.fromEntries(
-          (request.questions ?? []).map((question) => [
-            question.id,
-            { answers: question.options?.length ? [question.options[0]!.label] : ["ok"] },
-          ]),
-        ),
-      }),
+      userInput: (request) => (options.onUserInput ?? firstOptionAnswers)(request),
     });
 
     this.adapter.on("itemStarted", (payload) =>
@@ -78,6 +98,9 @@ export class TaskRunner {
       if (!this.running) return;
       if (payload.turn?.status === "completed") {
         this.finish({ type: "finished", status: "success" });
+      } else if (payload.turn?.status === "interrupted") {
+        // The user cancelled (turn/interrupt) — FR-4.6's third terminal state.
+        this.finish({ type: "finished", status: "cancelled" });
       } else {
         this.finish({
           type: "finished",
@@ -121,17 +144,53 @@ export class TaskRunner {
         cwd: this.workspace.workspaceDir,
         sandbox: this.manifest.sandbox ?? "workspace-write",
       });
-      await this.adapter.startTurn({
+      this.threadId = thread.threadId;
+      const turn = await this.adapter.startTurn({
         threadId: thread.threadId,
         input: [
           { type: "skill", name: task.skill.name, path: skillPath },
           { type: "text", text: paramsText(params) },
         ],
       });
+      // turn/completed may already have been processed while awaiting the
+      // turn/start response (both can arrive in one stdio chunk) — don't
+      // resurrect a turn that finish() has already closed.
+      if (this.running) this.turnId = turn.turnId;
     } catch (error) {
       this.finish({ type: "finished", status: "failed", errorMessage: (error as Error).message });
       throw error;
     }
+  }
+
+  /**
+   * Task-scoped chat (FR-4.3): steer the in-progress turn, or start a new turn
+   * on the run's thread when idle (follow-up after a terminal state).
+   */
+  async sendChat(text: string): Promise<void> {
+    if (!this.threadId) {
+      throw new Error("no active task to chat with (nincs aktív feladat)");
+    }
+    const input = [{ type: "text", text } as const];
+    if (this.turnId) {
+      await this.adapter.steerTurn({
+        threadId: this.threadId,
+        expectedTurnId: this.turnId,
+        input,
+      });
+    } else {
+      this.running = true;
+      const turn = await this.adapter.startTurn({ threadId: this.threadId, input });
+      // Same single-chunk race as in launch(): only track a still-open turn.
+      if (this.running) this.turnId = turn.turnId;
+    }
+  }
+
+  /** Cancel the in-progress turn (FR-4.5); the confirmation dialog is the UI's job. */
+  async cancel(): Promise<void> {
+    if (!this.threadId || !this.turnId) {
+      throw new Error("no turn in progress to cancel (nincs megszakítható futás)");
+    }
+    await this.adapter.interruptTurn({ threadId: this.threadId, turnId: this.turnId });
   }
 
   private whileRunning(event: TaskEvent): void {
@@ -140,6 +199,7 @@ export class TaskRunner {
 
   private finish(event: Extract<TaskEvent, { type: "finished" }>): void {
     this.running = false;
+    this.turnId = undefined;
     this.emit(event);
   }
 

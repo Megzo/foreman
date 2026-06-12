@@ -4,6 +4,8 @@ import type {
   BootState,
   ShellApi,
   TaskEvent,
+  UserInputAnswers,
+  UserInputRequestPayload,
 } from "@foreman/shell-main/ipc";
 
 export const TEST_MANIFEST: AppManifest = {
@@ -33,27 +35,37 @@ export interface FakeShell {
   pushAuth(state: AuthState): void;
   /** Push a task event to the subscribed renderer, as main would over IPC. */
   pushTask(event: TaskEvent): void;
+  /** Push a user-input request to the subscribed renderer, as main would over IPC. */
+  pushUserInput(request: UserInputRequestPayload): void;
   /** Method invocations the UI made, e.g. "startLogin:chatgpt", "logout". */
   calls: string[];
   /** Params of each launchTask call, in order. */
   launches: Array<{ taskId: string; params: Record<string, string | number | boolean> }>;
+  /** Each answerUserInput call: the request id and the protocol-shaped answers. */
+  userInputAnswers: Array<{ requestId: number; answers: UserInputAnswers }>;
 }
 
 export function makeFakeShell(boot: BootState = { ok: true, manifest: TEST_MANIFEST, shellVersion: "0.0.1" }): FakeShell {
   const handlers = new Set<(state: AuthState) => void>();
   const taskHandlers = new Set<(event: TaskEvent) => void>();
+  const userInputHandlers = new Set<(request: UserInputRequestPayload) => void>();
   let current: AuthState = { status: "checking" };
   const calls: string[] = [];
   const launches: FakeShell["launches"] = [];
+  const userInputAnswers: FakeShell["userInputAnswers"] = [];
   return {
     calls,
     launches,
+    userInputAnswers,
     pushAuth(state) {
       current = state;
       for (const handler of handlers) handler(state);
     },
     pushTask(event) {
       for (const handler of taskHandlers) handler(event);
+    },
+    pushUserInput(request) {
+      for (const handler of userInputHandlers) handler(request);
     },
     api: {
       getBootState: async () => boot,
@@ -78,6 +90,20 @@ export function makeFakeShell(boot: BootState = { ok: true, manifest: TEST_MANIF
       onTaskEvent(handler) {
         taskHandlers.add(handler);
         return () => taskHandlers.delete(handler);
+      },
+      sendChat: async (text) => {
+        calls.push(`sendChat:${text}`);
+      },
+      cancelTask: async () => {
+        calls.push("cancelTask");
+      },
+      onUserInputRequest(handler) {
+        userInputHandlers.add(handler);
+        return () => userInputHandlers.delete(handler);
+      },
+      answerUserInput: async (requestId, answers) => {
+        calls.push(`answerUserInput:${requestId}`);
+        userInputAnswers.push({ requestId, answers });
       },
       pickFile: async () => "/home/user/picked.epub",
     },

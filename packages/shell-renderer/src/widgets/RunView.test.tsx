@@ -76,6 +76,17 @@ describe("RunView renders from a recorded event stream (Phase 4)", () => {
     expect(screen.getByTestId("run-status").textContent).toMatch(/Folyamatban/);
   });
 
+  test("a cancelled run shows the cancelled terminal state (FR-4.6, Phase 6)", () => {
+    renderRun([
+      { type: "runStarted", taskId: "echo" },
+      { type: "finished", status: "cancelled" },
+    ]);
+
+    expect(screen.getByTestId("run-cancelled").textContent).toMatch(/megszakítva/i);
+    expect(screen.queryByTestId("run-success")).toBeNull();
+    expect(screen.queryByTestId("run-failed")).toBeNull();
+  });
+
   test("a failed run shows the failed state with a friendly cause line (FR-4.6)", () => {
     renderRun([
       { type: "runStarted", taskId: "echo" },

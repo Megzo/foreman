@@ -96,15 +96,21 @@ export interface StartTurnOptions {
   input: TurnInput[];
 }
 
+/** schema: V2TurnStartResponse — { turn: { id, status, ... } }. */
+export interface TurnRef {
+  turnId: string;
+}
+
 export interface SteerTurnOptions {
   threadId: string;
   expectedTurnId: string;
   input: TurnInput[];
 }
 
+/** schema: V2TurnInterruptParams — both fields are required. */
 export interface InterruptTurnOptions {
   threadId: string;
-  turnId?: string;
+  turnId: string;
 }
 
 /** Common addressing fields on item-scoped notifications. */

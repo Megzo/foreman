@@ -4,7 +4,13 @@ import { CodexAdapter, type AgentAdapter } from "@foreman/codex-adapter";
 import { AuthController } from "./auth-controller.js";
 import { codexHomePath } from "./codex-home.js";
 import { DecisionLog } from "./decision-log.js";
-import type { AuthState, BootState, TaskParamValues } from "./ipc.js";
+import type {
+  AuthState,
+  BootState,
+  TaskParamValues,
+  UserInputAnswers,
+  UserInputRequestPayload,
+} from "./ipc.js";
 import { ManifestLoader } from "./manifest.js";
 import { TaskRunner } from "./task-runner.js";
 import { WorkspaceProvisioner } from "./workspace.js";
@@ -15,10 +21,12 @@ import { WorkspaceProvisioner } from "./workspace.js";
  *   app-scoped CODEX_HOME -> read account -> stream auth state to renderer.
  *
  * Dev knobs:
- *   FOREMAN_MANIFEST   path to the app manifest (default: apps/echo-demo)
- *   FOREMAN_MOCK_PEER  "1" runs the scripted mock peer instead of real codex,
- *                      so UI work is fully offline and burns no tokens.
- *   FOREMAN_USER_DATA  override the userData dir (E2E isolation).
+ *   FOREMAN_MANIFEST       path to the app manifest (default: apps/echo-demo)
+ *   FOREMAN_MOCK_PEER      "1" runs the scripted mock peer instead of real
+ *                          codex, so UI work is fully offline and burns no tokens.
+ *   FOREMAN_MOCK_SCENARIO  mock-peer scenario (default "signed-out"); E2E uses
+ *                          "steerable"/"user-input" for the Phase 6 flows.
+ *   FOREMAN_USER_DATA      override the userData dir (E2E isolation).
  */
 
 if (process.env.FOREMAN_USER_DATA) {
@@ -42,7 +50,10 @@ function makeAdapter(): AgentAdapter {
       "../../../codex-adapter/test/fixtures/mock-peer.mjs",
     );
     return new CodexAdapter({
-      command: { bin: process.execPath, args: [mockPeer, "signed-out"] },
+      command: {
+        bin: process.execPath,
+        args: [mockPeer, process.env.FOREMAN_MOCK_SCENARIO ?? "signed-out"],
+      },
       // In Electron, execPath is the Electron binary; run the peer as plain Node.
       env: { ELECTRON_RUN_AS_NODE: "1" },
     });
@@ -97,6 +108,11 @@ async function boot(): Promise<void> {
     const decisionLog = new DecisionLog(
       join(app.getPath("userData"), "logs", "policy-decisions.jsonl"),
     );
+    // requestUserInput correlation (FR-4.4): each agent question goes to the
+    // renderer with a requestId; the modal's answer resolves the pending
+    // promise, which becomes the JSON-RPC response back to codex.
+    let nextUserInputId = 1;
+    const pendingUserInputs = new Map<number, (answers: UserInputAnswers) => void>();
     let runnerPromise: Promise<TaskRunner> | undefined;
     const ensureRunner = () =>
       (runnerPromise ??= new WorkspaceProvisioner()
@@ -112,6 +128,15 @@ async function boot(): Promise<void> {
             manifest,
             workspace,
             onPolicyDecision: (record) => decisionLog.append(record),
+            onUserInput: (request) =>
+              new Promise((resolve) => {
+                const requestId = nextUserInputId++;
+                pendingUserInputs.set(requestId, (answers) => resolve({ answers }));
+                window.webContents.send("shell:userInputRequest", {
+                  requestId,
+                  questions: request.questions ?? [],
+                } satisfies UserInputRequestPayload);
+              }),
           });
           runner.onEvent((event) => window.webContents.send("shell:taskEvent", event));
           return runner;
@@ -120,6 +145,22 @@ async function boot(): Promise<void> {
       const runner = await ensureRunner();
       await runner.launch(taskId, params);
     });
+    ipcMain.handle("shell:sendChat", async (_event, text: string) => {
+      const runner = await ensureRunner();
+      await runner.sendChat(text);
+    });
+    ipcMain.handle("shell:cancelTask", async () => {
+      const runner = await ensureRunner();
+      await runner.cancel();
+    });
+    ipcMain.handle(
+      "shell:answerUserInput",
+      (_event, requestId: number, answers: UserInputAnswers) => {
+        const pending = pendingUserInputs.get(requestId);
+        pendingUserInputs.delete(requestId);
+        pending?.(answers);
+      },
+    );
     ipcMain.handle("shell:pickFile", async (_event, extensions?: string[]) => {
       const result = await dialog.showOpenDialog(window, {
         properties: ["openFile"],

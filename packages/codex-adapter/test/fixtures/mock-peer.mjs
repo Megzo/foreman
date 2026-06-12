@@ -15,6 +15,12 @@
 //   echo-input   turn echoes the received turn/start input back as one delta
 //                (lets tests assert what the client actually sent)
 //   turn-fails   turn streams one delta, then completes with status "failed"
+//   steerable    the turn stays open until a turn/steer (echoes the steer
+//                input as a delta, then completes) or a turn/interrupt
+//                (completes with status "interrupted"); both validate the
+//                turn-id precondition like the real server
+//   user-input   turn sends an item/tool/requestUserInput mid-turn, echoes
+//                the client's answers back as a delta, then completes
 //
 // The peer enforces protocol order: any request before `initialize` +
 // `initialized` (or an initialize without experimentalApi) gets an error
@@ -52,8 +58,45 @@ const completeTurn = (status = "completed", error = null) =>
     turn: { id: SCOPE.turnId, status, error, items: [] },
   });
 
+let turnOpen = false;
+
 function runTurn(turnInput) {
   notify("item/started", { ...SCOPE, item: { id: SCOPE.itemId, type: "agentMessage" } });
+
+  if (scenario === "steerable") {
+    // The turn idles in progress; turn/steer or turn/interrupt ends it.
+    turnOpen = true;
+    return;
+  }
+
+  if (scenario === "user-input") {
+    sendServerRequest(
+      "item/tool/requestUserInput",
+      {
+        ...SCOPE,
+        questions: [
+          {
+            id: "tone",
+            header: "Megszólítás",
+            question: "Formális vagy informális megszólítást használjak?",
+            options: [
+              { label: "Formális", description: "magázódás" },
+              { label: "Informális", description: "tegeződés" },
+            ],
+          },
+        ],
+      },
+      (response) => {
+        if (response.error) {
+          notify("mock/userInputError", response.error);
+        } else {
+          notify("item/agentMessage/delta", { ...SCOPE, delta: JSON.stringify(response.result) });
+        }
+        completeTurn();
+      },
+    );
+    return;
+  }
 
   if (scenario === "die-mid-turn") {
     // Flush the delta before dying so the death is observably mid-turn.
@@ -162,6 +205,25 @@ function handleRequest({ id, method, params }) {
       }
       respond(id, { turn: { id: SCOPE.turnId } });
       runTurn(params?.input);
+      return;
+    case "turn/steer":
+      // schema: expectedTurnId is a hard precondition on the active turn.
+      if (!turnOpen || params?.expectedTurnId !== SCOPE.turnId) {
+        return respondError(id, -32000, `turn/steer precondition failed: expectedTurnId=${params?.expectedTurnId}`);
+      }
+      turnOpen = false;
+      respond(id, { turnId: SCOPE.turnId });
+      notify("item/agentMessage/delta", { ...SCOPE, delta: JSON.stringify(params?.input ?? []) });
+      completeTurn();
+      return;
+    case "turn/interrupt":
+      // schema: V2TurnInterruptParams requires both threadId and turnId.
+      if (!turnOpen || params?.turnId !== SCOPE.turnId || params?.threadId !== SCOPE.threadId) {
+        return respondError(id, -32000, `turn/interrupt precondition failed: turnId=${params?.turnId}`);
+      }
+      turnOpen = false;
+      respond(id, {});
+      completeTurn("interrupted");
       return;
     default:
       return respondError(id, -32601, `mock peer: unhandled method ${method}`);

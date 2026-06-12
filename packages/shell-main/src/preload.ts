@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
-import type { AuthState, ShellApi, TaskEvent } from "./ipc.js";
+import type { AuthState, ShellApi, TaskEvent, UserInputRequestPayload } from "./ipc.js";
 
 /**
  * The only bridge between renderer and main: implements ShellApi over IPC and
@@ -27,6 +27,18 @@ const api: ShellApi = {
       ipcRenderer.removeListener("shell:taskEvent", listener);
     };
   },
+  sendChat: (text) => ipcRenderer.invoke("shell:sendChat", text),
+  cancelTask: () => ipcRenderer.invoke("shell:cancelTask"),
+  onUserInputRequest(handler) {
+    const listener = (_event: IpcRendererEvent, request: UserInputRequestPayload) =>
+      handler(request);
+    ipcRenderer.on("shell:userInputRequest", listener);
+    return () => {
+      ipcRenderer.removeListener("shell:userInputRequest", listener);
+    };
+  },
+  answerUserInput: (requestId, answers) =>
+    ipcRenderer.invoke("shell:answerUserInput", requestId, answers),
   pickFile: (extensions) => ipcRenderer.invoke("shell:pickFile", extensions),
 };
 

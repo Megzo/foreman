@@ -37,12 +37,13 @@ const adapters: CodexAdapter[] = [];
 function makeRunner(
   scenario: string,
   manifest: AppManifest = MANIFEST,
+  extra: Partial<ConstructorParameters<typeof TaskRunner>[0]> = {},
 ): { runner: TaskRunner; events: TaskEvent[] } {
   const adapter = new CodexAdapter({
     command: { bin: process.execPath, args: [MOCK_PEER, scenario] },
   });
   adapters.push(adapter);
-  const runner = new TaskRunner({ adapter, manifest, workspace: WORKSPACE });
+  const runner = new TaskRunner({ adapter, manifest, workspace: WORKSPACE, ...extra });
   const events: TaskEvent[] = [];
   runner.onEvent((event) => events.push(event));
   return { runner, events };
@@ -162,6 +163,133 @@ describe("TaskRunner terminal states (FR-4.6)", () => {
     await runner.launch("echo", { message: "second" });
     await vi.waitFor(() => expect(finished(events)).toBeTruthy());
     expect(finished(events)).toEqual({ type: "finished", status: "success" });
+  });
+});
+
+describe("TaskRunner in-task chat routing (FR-4.3, Phase 6)", () => {
+  test("a chat message during an in-progress turn is delivered via turn/steer", async () => {
+    const { runner, events } = makeRunner("steerable");
+    await startAdapter();
+
+    // launch resolves once turn/start is answered, so the turn is in progress.
+    await runner.launch("echo", { message: "ok" });
+    await runner.sendChat("legyél formális");
+    await vi.waitFor(() => expect(finished(events)).toBeTruthy());
+
+    expect(finished(events)).toEqual({ type: "finished", status: "success" });
+    // The steerable peer only accepts turn/steer (with the matching
+    // expectedTurnId) while the turn is open, and echoes the steer input it
+    // received — so the echoed text proves both the method and the payload.
+    const echoed = events
+      .filter((event) => event.type === "agentDelta")
+      .map((event) => (event as { text: string }).text)
+      .join("");
+    expect(JSON.parse(echoed)).toEqual([{ type: "text", text: "legyél formális" }]);
+  });
+
+  test("a chat message when the turn is idle starts a follow-up turn on the same thread", async () => {
+    const { runner, events } = makeRunner("echo-input");
+    await startAdapter();
+
+    await runner.launch("echo", { message: "ok" });
+    await vi.waitFor(() => expect(finished(events)).toBeTruthy());
+    events.length = 0;
+
+    // The run reached a terminal state; chat stays available for follow-ups.
+    await runner.sendChat("köszönöm, még valami");
+    await vi.waitFor(() => expect(finished(events)).toBeTruthy());
+
+    // echo-input echoes each turn/start's input — the follow-up went out as a
+    // plain text turn (no skill ref) on the already-started thread.
+    const echoed = events
+      .filter((event) => event.type === "agentDelta")
+      .map((event) => (event as { text: string }).text)
+      .join("");
+    expect(JSON.parse(echoed)).toEqual([{ type: "text", text: "köszönöm, még valami" }]);
+  });
+
+  test("chat with no run launched rejects instead of opening a blank conversation", async () => {
+    const { runner } = makeRunner("happy");
+    await startAdapter();
+
+    await expect(runner.sendChat("hahó")).rejects.toThrow(/aktív|active/i);
+  });
+});
+
+describe("TaskRunner cancel (FR-4.5/4.6, Phase 6)", () => {
+  test("cancel interrupts the in-progress turn and the run ends in the cancelled state", async () => {
+    const { runner, events } = makeRunner("steerable");
+    await startAdapter();
+
+    await runner.launch("echo", { message: "ok" });
+    await runner.cancel();
+    await vi.waitFor(() => expect(finished(events)).toBeTruthy());
+
+    // The steerable peer only honours turn/interrupt with the exact
+    // {threadId, turnId} pair (schema: V2TurnInterruptParams) and then
+    // completes the turn with status "interrupted".
+    expect(finished(events)).toEqual({ type: "finished", status: "cancelled" });
+  });
+
+  test("cancel with no turn in progress rejects", async () => {
+    const { runner, events } = makeRunner("happy");
+    await startAdapter();
+
+    await runner.launch("echo", { message: "ok" });
+    await vi.waitFor(() => expect(finished(events)).toBeTruthy());
+
+    await expect(runner.cancel()).rejects.toThrow(/turn|futás/i);
+  });
+});
+
+describe("TaskRunner user-input requests (FR-4.4, Phase 6)", () => {
+  test("a requestUserInput is answered by the shell's handler and the answers reach the agent", async () => {
+    const requests: unknown[] = [];
+    const { runner, events } = makeRunner("user-input", MANIFEST, {
+      onUserInput: async (request) => {
+        requests.push(request);
+        return { answers: { tone: { answers: ["Formális"] } } };
+      },
+    });
+    await startAdapter();
+
+    await runner.launch("echo", { message: "ok" });
+    await vi.waitFor(() => expect(finished(events)).toBeTruthy());
+
+    expect(finished(events)).toEqual({ type: "finished", status: "success" });
+    // The peer echoes the JSON-RPC response it received — the protocol-shaped
+    // answer payload (schema: ToolRequestUserInputResponse) went back verbatim.
+    const echoed = events
+      .filter((event) => event.type === "agentDelta")
+      .map((event) => (event as { text: string }).text)
+      .join("");
+    expect(JSON.parse(echoed)).toEqual({ answers: { tone: { answers: ["Formális"] } } });
+    expect(requests[0]).toMatchObject({
+      questions: [
+        {
+          id: "tone",
+          question: "Formális vagy informális megszólítást használjak?",
+          options: [
+            { label: "Formális", description: "magázódás" },
+            { label: "Informális", description: "tegeződés" },
+          ],
+        },
+      ],
+    });
+  });
+
+  test("without a handler the first option is answered, so a run can never hang on a hidden dialog", async () => {
+    const { runner, events } = makeRunner("user-input");
+    await startAdapter();
+
+    await runner.launch("echo", { message: "ok" });
+    await vi.waitFor(() => expect(finished(events)).toBeTruthy());
+
+    const echoed = events
+      .filter((event) => event.type === "agentDelta")
+      .map((event) => (event as { text: string }).text)
+      .join("");
+    expect(JSON.parse(echoed)).toEqual({ answers: { tone: { answers: ["Formális"] } } });
   });
 });
 

@@ -15,6 +15,7 @@ import type {
   StartTurnOptions,
   SteerTurnOptions,
   ThreadRef,
+  TurnRef,
   WindowsSandboxReadinessResult,
   WindowsSandboxSetupStartOptions,
   WindowsSandboxSetupStartResult,
@@ -209,11 +210,18 @@ export class CodexAdapter implements AgentAdapter {
     return { threadId: extractThreadId(result, "thread/resume") ?? threadId };
   }
 
-  async startTurn(options: StartTurnOptions): Promise<void> {
-    await this.connection().request("turn/start", {
+  async startTurn(options: StartTurnOptions): Promise<TurnRef> {
+    const result = (await this.connection().request("turn/start", {
       threadId: options.threadId,
       input: options.input,
-    });
+    })) as { turn?: { id?: string } } | undefined;
+    const turnId = result?.turn?.id;
+    if (!turnId) {
+      throw new Error(
+        `turn/start: response contained no turn id: ${JSON.stringify(result).slice(0, 200)}`,
+      );
+    }
+    return { turnId };
   }
 
   async steerTurn(options: SteerTurnOptions): Promise<void> {
