@@ -62,7 +62,10 @@ export function RunView({
   return (
     <section className="run-view">
       <h2>{localized(task.label)}</h2>
-      <p data-testid="run-status" className="run-status">
+      <p
+        data-testid="run-status"
+        className={`run-status ${finished === undefined ? "live" : `done status-${finished.status}`}`}
+      >
         {finished === undefined
           ? t("Folyamatban…")
           : finished.status === "success"
@@ -102,7 +105,7 @@ export function RunView({
             </ul>
           ) : null}
           {finished.outputDir && onOpenOutput ? (
-            <button type="button" onClick={() => onOpenOutput(finished.outputDir!)}>
+            <button type="button" className="primary" onClick={() => onOpenOutput(finished.outputDir!)}>
               {t("Mappa megnyitása")}
             </button>
           ) : null}

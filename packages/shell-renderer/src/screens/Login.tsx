@@ -1,11 +1,38 @@
-import type { AuthState, ShellApi } from "@foreman/shell-main/ipc";
+import type { AuthState, ManifestBranding, ShellApi } from "@foreman/shell-main/ipc";
 import { t } from "../t.js";
 
-export function Login({ auth, api }: { auth: AuthState; api: ShellApi }) {
+/** App identity at the top of every login state — the screen is branded, not generic. */
+function Brand({ branding }: { branding?: ManifestBranding }) {
+  if (!branding) return null;
+  return (
+    <div className="login-brand">
+      {branding.icon ? (
+        <img className="login-icon" src={branding.icon} alt="" />
+      ) : (
+        // No manifest icon: a brand-tinted monogram of the product name.
+        <div className="login-monogram" aria-hidden="true">
+          {branding.productName.trim().charAt(0).toUpperCase()}
+        </div>
+      )}
+      <h1>{branding.productName}</h1>
+    </div>
+  );
+}
+
+export function Login({
+  auth,
+  api,
+  branding,
+}: {
+  auth: AuthState;
+  api: ShellApi;
+  branding?: ManifestBranding;
+}) {
   if (auth.status === "loginPending") {
     if (auth.flow.type === "chatgptDeviceCode") {
       return (
         <section className="login" data-testid="login-pending">
+          <Brand branding={branding} />
           <p>{t("Nyisd meg ezt a címet, és írd be a kódot:")}</p>
           <p className="device-url">{auth.flow.verificationUrl}</p>
           <p className="device-code">{auth.flow.userCode}</p>
@@ -17,6 +44,7 @@ export function Login({ auth, api }: { auth: AuthState; api: ShellApi }) {
     const { authUrl, browserOpened } = auth.flow;
     return (
       <section className="login" data-testid="login-pending">
+        <Brand branding={branding} />
         <p>
           {browserOpened === false
             ? t("Nem sikerült megnyitni a böngészőt. Nyisd meg ezt a címet a bejelentkezéshez:")
@@ -45,6 +73,7 @@ export function Login({ auth, api }: { auth: AuthState; api: ShellApi }) {
     // Friendly text only; the raw cause stays behind a details expander (UX requirement).
     return (
       <section className="login" data-testid="login-failed">
+        <Brand branding={branding} />
         <p>{t("A bejelentkezés nem sikerült.")}</p>
         <button type="button" className="primary" onClick={() => void api.cancelLogin()}>
           {t("Újrapróbálás")}
@@ -59,6 +88,8 @@ export function Login({ auth, api }: { auth: AuthState; api: ShellApi }) {
 
   return (
     <section className="login">
+      <Brand branding={branding} />
+      <p>{t("Jelentkezz be a ChatGPT-fiókoddal, és kezdődhet a munka.")}</p>
       <button type="button" className="primary" onClick={() => void api.startLogin("chatgpt")}>
         {t("Bejelentkezés ChatGPT-fiókkal")}
       </button>

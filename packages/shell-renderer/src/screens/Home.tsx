@@ -8,6 +8,7 @@ import type {
   ShellApi,
 } from "@foreman/shell-main/ipc";
 import { TaskScreen } from "./Task.js";
+import { ArrowRight, HistoryIcon, TaskIcon } from "../widgets/icons.js";
 import { localized, t, type Locale } from "../t.js";
 
 /** Localized run-status label, shared by the history rows and the resume offer. */
@@ -86,10 +87,13 @@ export function Home({
   return (
     <section className="home">
       <header className="home-header">
-        <h1>{manifest.branding.productName}</h1>
+        <div className="home-title">
+          <span className="home-eyebrow">{t("Válassz egy feladatot")}</span>
+          <h1>{manifest.branding.productName}</h1>
+        </div>
         <button
           type="button"
-          className="link"
+          className="settings-button"
           aria-label={t("Beállítások")}
           onClick={() => setSettingsOpen((open) => !open)}
         >
@@ -102,6 +106,7 @@ export function Home({
           <p>
             {t("Verzió")}: {shellVersion} · {manifest.name} {manifest.version}
           </p>
+          <div className="settings-row-label">{t("Nyelv")}</div>
           <div className="locale-switch" role="group" aria-label={t("Nyelv")}>
             {/* Language names stay in their own language (proper nouns), so the
                 control reads the same whichever locale is active. */}
@@ -133,6 +138,7 @@ export function Home({
           <div className="resume-actions">
             <button
               type="button"
+              className="primary"
               onClick={() => {
                 const task = findTask(resumable.taskId);
                 if (!task) return;
@@ -163,8 +169,16 @@ export function Home({
             className="launcher-card"
             onClick={() => setActiveTask(task)}
           >
-            <strong>{localized(task.label)}</strong>
-            {task.description ? <span>{localized(task.description)}</span> : null}
+            <span className="launcher-icon">
+              <TaskIcon />
+            </span>
+            <span className="launcher-body">
+              <strong>{localized(task.label)}</strong>
+              {task.description ? <span>{localized(task.description)}</span> : null}
+            </span>
+            <span className="launcher-go">
+              <ArrowRight />
+            </span>
           </button>
         ))}
       </div>
@@ -172,7 +186,8 @@ export function Home({
         <h2>{t("Korábbi futások")}</h2>
         {runs.length === 0 ? (
           <p data-testid="history-empty" className="history-empty">
-            {t("Itt jelennek meg a korábbi feladataid, amint elindítasz egyet.")}
+            <HistoryIcon />
+            <span>{t("Itt jelennek meg a korábbi feladataid, amint elindítasz egyet.")}</span>
           </p>
         ) : (
           <ul data-testid="run-history" className="run-history">

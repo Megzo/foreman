@@ -10,6 +10,8 @@
  */
 export const en: Record<string, string> = {
   // Login screen (FR-3.2/3.3)
+  "Jelentkezz be a ChatGPT-fiókoddal, és kezdődhet a munka.":
+    "Sign in with your ChatGPT account and you're ready to go.",
   "Bejelentkezés ChatGPT-fiókkal": "Sign in with your ChatGPT account",
   "Bejelentkezés kóddal": "Sign in with a code",
   "Nyisd meg ezt a címet, és írd be a kódot:": "Open this address and enter the code:",
@@ -22,6 +24,7 @@ export const en: Record<string, string> = {
   "Újrapróbálás": "Try again",
 
   // Home screen (FR-3.4, FR-7.3)
+  "Válassz egy feladatot": "Choose a task",
   "Beállítások": "Settings",
   "Nyelv": "Language",
   "Verzió": "Version",

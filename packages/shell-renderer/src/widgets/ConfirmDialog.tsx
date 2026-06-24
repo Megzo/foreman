@@ -16,12 +16,14 @@ export function ConfirmDialog({
     <div className="modal-backdrop" role="dialog" aria-modal="true">
       <div className="confirm-dialog">
         <p>{message}</p>
-        <button type="button" onClick={onConfirm}>
-          {confirmLabel}
-        </button>
-        <button type="button" onClick={onDismiss}>
-          {t("Nem")}
-        </button>
+        <div className="dialog-actions">
+          <button type="button" className="secondary" onClick={onDismiss}>
+            {t("Nem")}
+          </button>
+          <button type="button" className="primary danger" onClick={onConfirm}>
+            {confirmLabel}
+          </button>
+        </div>
       </div>
     </div>
   );

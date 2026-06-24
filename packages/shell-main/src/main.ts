@@ -32,6 +32,17 @@ import { WorkspaceProvisioner } from "./workspace.js";
  *   FOREMAN_USER_DATA      override the userData dir (E2E isolation).
  */
 
+// WSL/headless Linux has no D-Bus session bus or dconf daemon, so GLib/GIO
+// (which shell.openPath and GTK go through) floods stderr with
+// "failed to commit changes to dconf" on every file-manager call. Point GSettings
+// at the in-memory backend and skip the accessibility bridge so dev on WSL is
+// quiet. Linux-only and a no-op on the Windows/macOS targets, where these
+// integrations exist for real.
+if (process.platform === "linux") {
+  process.env.GSETTINGS_BACKEND ??= "memory";
+  process.env.NO_AT_BRIDGE ??= "1";
+}
+
 if (process.env.FOREMAN_USER_DATA) {
   app.setPath("userData", process.env.FOREMAN_USER_DATA);
 }
@@ -82,9 +93,12 @@ async function boot(): Promise<void> {
     width: 1100,
     height: 720,
     title: bootState.ok ? bootState.manifest.branding.productName : "Foreman",
-    backgroundColor: bootState.ok
-      ? (bootState.manifest.branding.colors.background ?? "#ffffff")
-      : "#ffffff",
+    // Warm paper to match the renderer's first paint (no cold flash); the brand
+    // atmosphere layers on top in CSS.
+    backgroundColor: "#f1ebe0",
+    // Hide the desktop menu bar (Alt reveals it) — keeps edit accelerators but
+    // drops the coding-tool chrome; this is a consumer app (PRD UX).
+    autoHideMenuBar: true,
     webPreferences: {
       preload: join(import.meta.dirname, "../preload/preload.mjs"),
       contextIsolation: true,

@@ -54,9 +54,10 @@ export function ParamForm({
       case "file": {
         const current = values[field.id];
         return (
-          <>
+          <div className="file-field">
             <button
               type="button"
+              className="secondary"
               onClick={() =>
                 void pickFile(field.extensions).then((path) => {
                   if (path !== null) setValue(field.id, path);
@@ -65,8 +66,10 @@ export function ParamForm({
             >
               {label}
             </button>
-            {typeof current === "string" && current !== "" ? <span>{current}</span> : null}
-          </>
+            {typeof current === "string" && current !== "" ? (
+              <span className="file-name">{current}</span>
+            ) : null}
+          </div>
         );
       }
       case "text":
@@ -137,7 +140,7 @@ export function ParamForm({
           {t("Kötelező mező")}: {missing.map((field) => localized(field.label)).join(", ")}
         </p>
       ) : null}
-      <button type="submit" disabled={missing.length > 0}>
+      <button type="submit" className="primary" disabled={missing.length > 0}>
         {t("Indítás")}
       </button>
     </form>

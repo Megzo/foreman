@@ -15,6 +15,7 @@ describe("manifest-driven theme tokens (Phase 9, FR-1.1)", () => {
   test("branding colors land as the documented CSS custom properties", () => {
     expect(themeTokens(TEST_MANIFEST.branding)).toEqual({
       "--color-primary": "#1f6feb",
+      "--color-primary-contrast": "#ffffff",
       "--color-background": "#f6f8fa",
       "--color-accent": "#2da44e",
     });
@@ -30,9 +31,16 @@ describe("manifest-driven theme tokens (Phase 9, FR-1.1)", () => {
   test("optional colors fall back to neutrals and the accent to the primary", () => {
     expect(themeTokens({ productName: "x", colors: { primary: "#000000" } })).toEqual({
       "--color-primary": "#000000",
+      "--color-primary-contrast": "#ffffff",
       "--color-background": "#ffffff",
       "--color-accent": "#000000",
     });
+  });
+
+  test("the on-primary text token flips to dark on a light brand color, so buttons stay readable", () => {
+    expect(
+      themeTokens({ productName: "x", colors: { primary: "#f5f5f5" } })["--color-primary-contrast"],
+    ).toBe("#1f2328");
   });
 });
 

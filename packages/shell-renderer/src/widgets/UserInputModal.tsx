@@ -66,9 +66,11 @@ export function UserInputModal({
             )}
           </fieldset>
         ))}
-        <button type="submit" disabled={!answered}>
-          {t("Küldés")}
-        </button>
+        <div className="dialog-actions">
+          <button type="submit" className="primary" disabled={!answered}>
+            {t("Küldés")}
+          </button>
+        </div>
       </form>
     </div>
   );

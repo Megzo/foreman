@@ -30,8 +30,10 @@ const TASK: ManifestTask = {
 function renderForm(overrides: { pickFile?: (extensions?: string[]) => Promise<string | null> } = {}) {
   const submitted: TaskParamValues[] = [];
   const pickFile = overrides.pickFile ?? (async () => "/home/user/book.epub");
-  render(<ParamForm task={TASK} pickFile={pickFile} onSubmit={(params) => submitted.push(params)} />);
-  return { submitted };
+  const view = render(
+    <ParamForm task={TASK} pickFile={pickFile} onSubmit={(params) => submitted.push(params)} />,
+  );
+  return { submitted, container: view.container };
 }
 
 describe("ParamForm (FR-1.3): the five field types from the manifest schema", () => {
@@ -60,6 +62,16 @@ describe("ParamForm (FR-1.3): the five field types from the manifest schema", ()
     const submit = screen.getByRole("button", { name: /Indítás/ }) as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
     expect(screen.getByText(/Kötelező/)).toBeTruthy();
+  });
+
+  test("the start button is the form's single primary action (Phase 9.5 styling hook)", () => {
+    const { container } = renderForm();
+
+    const submit = screen.getByRole("button", { name: /Indítás/ }) as HTMLButtonElement;
+    expect(submit.type).toBe("submit");
+    expect(submit.classList.contains("primary")).toBe(true);
+    // The launch action is the only primary button — file-picker/cancel are secondary.
+    expect(container.querySelectorAll("button.primary")).toHaveLength(1);
   });
 
   test("the file picker fills the field via pickFile and enables submit", async () => {

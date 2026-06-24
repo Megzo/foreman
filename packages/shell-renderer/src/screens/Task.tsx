@@ -79,15 +79,17 @@ export function TaskScreen({
           void api.sendChat(text);
         }}
       />
-      {!finished ? (
-        <button type="button" onClick={() => setConfirmingCancel(true)}>
-          {t("Megszakítás")}
-        </button>
-      ) : (
-        <button type="button" onClick={onBack}>
-          {t("Vissza")}
-        </button>
-      )}
+      <div className="task-actions">
+        {!finished ? (
+          <button type="button" className="secondary danger" onClick={() => setConfirmingCancel(true)}>
+            {t("Megszakítás")}
+          </button>
+        ) : (
+          <button type="button" className="primary" onClick={onBack}>
+            {t("Vissza")}
+          </button>
+        )}
+      </div>
       {confirmingCancel ? (
         <ConfirmDialog
           message={t("Biztosan megszakítod a feladatot?")}

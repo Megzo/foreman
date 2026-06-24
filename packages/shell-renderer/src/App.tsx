@@ -69,7 +69,7 @@ export function App({ api }: { api: ShellApi }) {
           onLocaleChange={changeLocale}
         />
       ) : (
-        <Login auth={auth} api={api} />
+        <Login auth={auth} api={api} branding={boot.manifest.branding} />
       )}
     </main>
   );
