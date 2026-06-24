@@ -30,6 +30,28 @@ describe("login screen flows (FR-3.2, FR-3.3)", () => {
     expect(screen.getByText(/chatgpt\.com\/device/)).toBeTruthy();
   });
 
+  test("the chatgpt flow always shows the auth URL as a manual fallback (browser may not open, e.g. WSL)", async () => {
+    const shell = makeFakeShell();
+    render(<App api={shell.api} />);
+    act(() => shell.pushAuth({ status: "signedOut" }));
+
+    (await screen.findByRole("button", { name: /ChatGPT-fiókkal/i })).click();
+    act(() =>
+      shell.pushAuth({
+        status: "loginPending",
+        flow: {
+          type: "chatgpt",
+          authUrl: "https://auth.openai.com/abc123",
+          browserOpened: false,
+        },
+      }),
+    );
+
+    // The URL is rendered so the user can open it by hand when no browser launched.
+    const link = await screen.findByRole("link", { name: /auth\.openai\.com\/abc123/ });
+    expect(link.getAttribute("href")).toBe("https://auth.openai.com/abc123");
+  });
+
   test("a failed login shows a friendly error and retry starts a fresh login", async () => {
     const shell = makeFakeShell();
     render(<App api={shell.api} />);

@@ -25,7 +25,12 @@ describe("AuthController (FR-3.1/3.2/3.4): adapter -> AuthState stream", () => {
   test("full lifecycle: signedOut -> loginPending (browser opened) -> signedIn -> logout -> signedOut", async () => {
     const adapter = makeAdapter("signed-out");
     const opened: string[] = [];
-    const controller = new AuthController({ adapter, openExternal: (url) => opened.push(url) });
+    const controller = new AuthController({
+      adapter,
+      openExternal: (url) => {
+        opened.push(url);
+      },
+    });
     const states: string[] = [];
     controller.onChange((state) => states.push(state.status));
 
@@ -44,6 +49,30 @@ describe("AuthController (FR-3.1/3.2/3.4): adapter -> AuthState stream", () => {
     expect(controller.current.status).toBe("signedOut");
 
     expect(states).toEqual(["signedOut", "loginPending", "signedIn", "signedOut"]);
+  });
+
+  test("when the browser cannot be opened, the chatgpt flow reports browserOpened:false", async () => {
+    const adapter = makeAdapter("signed-out");
+    const controller = new AuthController({
+      adapter,
+      openExternal: () => Promise.reject(new Error("no browser on WSL")),
+    });
+    const flows: unknown[] = [];
+    controller.onChange((state) => {
+      if (state.status === "loginPending") flows.push(state.flow);
+    });
+
+    await adapter.start();
+    await controller.initialize();
+    await controller.startLogin("chatgpt");
+
+    // The pending state still carries the authUrl, just flagged as not opened,
+    // so the renderer shows it as a manual fallback.
+    expect(flows).toContainEqual({
+      type: "chatgpt",
+      authUrl: "https://auth.example.com/mock-oauth",
+      browserOpened: false,
+    });
   });
 
   test("an already-signed-in account is reported on initialize (FR-3.1)", async () => {

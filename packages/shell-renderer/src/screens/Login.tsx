@@ -12,9 +12,31 @@ export function Login({ auth, api }: { auth: AuthState; api: ShellApi }) {
         </section>
       );
     }
+    // chatgpt flow: the browser may not have opened (WSL/headless), so always
+    // show the auth URL as a manual fallback the user can open or copy.
+    const { authUrl, browserOpened } = auth.flow;
     return (
       <section className="login" data-testid="login-pending">
-        <p>{t("Bejelentkezés folyamatban a böngészőben…")}</p>
+        <p>
+          {browserOpened === false
+            ? t("Nem sikerült megnyitni a böngészőt. Nyisd meg ezt a címet a bejelentkezéshez:")
+            : t("Bejelentkezés folyamatban a böngészőben. Ha nem nyílt meg, nyisd meg ezt a címet:")}
+        </p>
+        <p className="auth-url">
+          <a href={authUrl} target="_blank" rel="noreferrer">
+            {authUrl}
+          </a>
+        </p>
+        <button
+          type="button"
+          className="link"
+          onClick={() => void navigator.clipboard?.writeText(authUrl)}
+        >
+          {t("Link másolása")}
+        </button>
+        <button type="button" className="link" onClick={() => void api.cancelLogin()}>
+          {t("Mégse")}
+        </button>
       </section>
     );
   }

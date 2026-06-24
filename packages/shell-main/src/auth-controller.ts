@@ -3,8 +3,12 @@ import type { AccountInfo, AuthState } from "./ipc.js";
 
 export interface AuthControllerOptions {
   adapter: AgentAdapter;
-  /** Opens the OAuth authUrl in the system browser (Electron: shell.openExternal). */
-  openExternal: (url: string) => void;
+  /**
+   * Opens the OAuth authUrl in the system browser (Electron: shell.openExternal).
+   * May return a promise; a rejection (or throw) means no browser launched
+   * (e.g. WSL/headless), which the renderer surfaces as a manual-URL fallback.
+   */
+  openExternal: (url: string) => void | Promise<unknown>;
 }
 
 /**
@@ -14,7 +18,7 @@ export interface AuthControllerOptions {
  */
 export class AuthController {
   private readonly adapter: AgentAdapter;
-  private readonly openExternal: (url: string) => void;
+  private readonly openExternal: (url: string) => void | Promise<unknown>;
   private readonly handlers = new Set<(state: AuthState) => void>();
   private state: AuthState = { status: "checking" };
   private pendingLoginId: string | undefined;
@@ -57,8 +61,19 @@ export class AuthController {
       const login = await this.adapter.startLogin({ type });
       this.pendingLoginId = login.loginId;
       if (login.type === "chatgpt") {
-        this.setState({ status: "loginPending", flow: { type: "chatgpt", authUrl: login.authUrl } });
-        this.openExternal(login.authUrl);
+        // Try the browser first, then publish the pending state once with
+        // whether it actually opened — the URL is shown either way so a
+        // headless/WSL machine can still complete the login by hand.
+        let browserOpened = true;
+        try {
+          await this.openExternal(login.authUrl);
+        } catch {
+          browserOpened = false;
+        }
+        this.setState({
+          status: "loginPending",
+          flow: { type: "chatgpt", authUrl: login.authUrl, browserOpened },
+        });
       } else {
         this.setState({
           status: "loginPending",

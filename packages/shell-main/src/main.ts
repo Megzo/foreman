@@ -99,7 +99,9 @@ async function boot(): Promise<void> {
     const adapter = makeAdapter();
     const auth = new AuthController({
       adapter,
-      openExternal: (url) => void shell.openExternal(url),
+      // Return the promise so a rejection (no browser, e.g. WSL/headless) flows
+      // through to browserOpened:false and the renderer shows the URL to copy.
+      openExternal: (url) => shell.openExternal(url),
     });
     auth.onChange((state) => window.webContents.send("shell:authState", state));
     ipcMain.handle("shell:getAuthState", () => auth.current);

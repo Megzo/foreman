@@ -21,7 +21,12 @@ export interface AccountInfo {
 
 /** The pending login flow as the login screen needs to render it (FR-3.2/3.3). */
 export type LoginFlow =
-  | { type: "chatgpt"; authUrl: string }
+  | {
+      type: "chatgpt";
+      authUrl: string;
+      /** Whether shell.openExternal actually launched a browser; false on WSL/headless. */
+      browserOpened?: boolean;
+    }
   | { type: "chatgptDeviceCode"; userCode: string; verificationUrl: string };
 
 /** Screen-driving auth state, pushed from main to renderer. */
