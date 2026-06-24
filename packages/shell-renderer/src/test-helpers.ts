@@ -123,6 +123,9 @@ export function makeFakeShell(boot: BootState = { ok: true, manifest: TEST_MANIF
       restartAgent: async () => {
         calls.push("restartAgent");
       },
+      openOutputDir: async (dir) => {
+        calls.push(`openOutputDir:${dir}`);
+      },
     },
   };
   return shell;

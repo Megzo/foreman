@@ -45,6 +45,7 @@ const api: ShellApi = {
   resumeRun: (runId) => ipcRenderer.invoke("shell:resumeRun", runId),
   dismissResume: (runId) => ipcRenderer.invoke("shell:dismissResume", runId),
   restartAgent: () => ipcRenderer.invoke("shell:restartAgent"),
+  openOutputDir: (dir) => ipcRenderer.invoke("shell:openOutputDir", dir),
 };
 
 contextBridge.exposeInMainWorld("foreman", api);

@@ -1,3 +1,4 @@
+import { basename, join } from "node:path";
 import type {
   AgentAdapter,
   ApprovalResponse,
@@ -6,9 +7,14 @@ import type {
 } from "@foreman/codex-adapter";
 import type { TaskEvent, TaskParamValues } from "./ipc.js";
 import type { AppManifest } from "./manifest-types.js";
+import { copyOutputs } from "./outputs.js";
 import { PolicyEngine, type PolicyDecisionRecord } from "./policy.js";
+import { ProgressWatcher } from "./progress-watch.js";
 import type { SessionStore } from "./session-store.js";
 import type { ProvisionedWorkspace } from "./workspace.js";
+
+/** The progress.json file the skill writes at the workspace root (PRD Open Q2). */
+const PROGRESS_FILE = "progress.json";
 
 export interface TaskRunnerOptions {
   adapter: AgentAdapter;
@@ -28,6 +34,12 @@ export interface TaskRunnerOptions {
    * recorded and becomes resumable after a crash (FR-7.2).
    */
   store?: SessionStore;
+  /**
+   * Base Documents dir (app.getPath("documents")). When set, a task with a
+   * completion definition copies its outputs here on success (FR-6.3); without
+   * it (headless tests) the success state simply carries no output folder.
+   */
+  documentsDir?: string;
 }
 
 /** The no-handler fallback: first option (or "ok" for free-text questions). */
@@ -40,6 +52,25 @@ function firstOptionAnswers(request: UserInputRequest): UserInputResponse {
       ]),
     ),
   };
+}
+
+/**
+ * The per-run Documents output folder name (FR-6.3): a user-supplied export
+ * name wins, else the input file's stem, else the task id — sanitized so it is
+ * a safe single path segment.
+ */
+function deriveJobName(task: AppManifest["tasks"][number], params: TaskParamValues): string {
+  const exportName = params.export_name;
+  if (typeof exportName === "string" && exportName.trim()) return sanitizeSegment(exportName);
+  const filePath = params.file_path;
+  if (typeof filePath === "string" && filePath.trim()) {
+    return sanitizeSegment(basename(filePath).replace(/\.[^.]+$/, ""));
+  }
+  return task.id;
+}
+
+function sanitizeSegment(value: string): string {
+  return value.trim().replace(/[/\\:*?"<>|]+/g, "_") || "run";
 }
 
 /** The params text item accompanying the skill input (FR-4.1). */
@@ -62,6 +93,7 @@ export class TaskRunner {
   private readonly manifest: AppManifest;
   private readonly workspace: ProvisionedWorkspace;
   private readonly store: SessionStore | undefined;
+  private readonly documentsDir: string | undefined;
   private readonly handlers = new Set<(event: TaskEvent) => void>();
   private running = false;
   /** The active run's thread; outlives the turn so follow-up chat can reuse it. */
@@ -70,12 +102,19 @@ export class TaskRunner {
   private turnId: string | undefined;
   /** The persisted run id, set on launch/resume; events append to its transcript. */
   private runId: string | undefined;
+  /** The task running right now — drives outputs copy at success (FR-6.3). */
+  private activeTask: AppManifest["tasks"][number] | undefined;
+  /** Watches the workspace progress.json while a run is live (PRD Open Q2). */
+  private progressWatcher: ProgressWatcher | undefined;
+  /** Job name for the Documents output folder, derived from the run's params. */
+  private jobName = "";
 
   constructor(options: TaskRunnerOptions) {
     this.adapter = options.adapter;
     this.manifest = options.manifest;
     this.workspace = options.workspace;
     this.store = options.store;
+    this.documentsDir = options.documentsDir;
 
     const policy = new PolicyEngine({
       policy: this.manifest.policy,
@@ -108,7 +147,7 @@ export class TaskRunner {
     this.adapter.on("turnCompleted", (payload) => {
       if (!this.running) return;
       if (payload.turn?.status === "completed") {
-        this.finish({ type: "finished", status: "success" });
+        void this.finishSuccess();
       } else if (payload.turn?.status === "interrupted") {
         // The user cancelled (turn/interrupt) — FR-4.6's third terminal state.
         this.finish({ type: "finished", status: "cancelled" });
@@ -147,8 +186,11 @@ export class TaskRunner {
     const { task, skillPath } = this.resolveTask(taskId);
 
     this.running = true;
+    this.activeTask = task;
+    this.jobName = deriveJobName(task, params);
     this.runId = this.store?.createRun({ taskId, params }).runId;
     this.emit({ type: "runStarted", taskId });
+    this.startProgressWatch();
     try {
       const thread = await this.adapter.startThread({
         cwd: this.workspace.workspaceDir,
@@ -186,8 +228,11 @@ export class TaskRunner {
     const { task, skillPath } = this.resolveTask(record.taskId);
 
     this.running = true;
+    this.activeTask = task;
+    this.jobName = deriveJobName(task, record.params);
     this.runId = runId;
     this.emit({ type: "runStarted", taskId: record.taskId });
+    this.startProgressWatch();
     try {
       const thread = await this.adapter.resumeThread(record.threadId);
       this.bindThread(thread.threadId);
@@ -262,6 +307,44 @@ export class TaskRunner {
     await this.adapter.interruptTurn({ threadId: this.threadId, turnId: this.turnId });
   }
 
+  /** Start (or restart) watching the workspace progress.json for this run. */
+  private startProgressWatch(): void {
+    this.progressWatcher?.stop();
+    this.progressWatcher = new ProgressWatcher(
+      join(this.workspace.workspaceDir, PROGRESS_FILE),
+      (update) => this.whileRunning({ type: "progress", ...update }),
+    );
+    this.progressWatcher.start();
+  }
+
+  /**
+   * Success terminal state with the FR-6.3 outputs copy: when the task declares
+   * a completion definition and a Documents dir is configured, copy the matching
+   * workspace files out and report the folder for the "Open folder" button. A
+   * copy failure never demotes the run — the files stay in the workspace.
+   */
+  private async finishSuccess(): Promise<void> {
+    // Close the run before the (async) copy so no late event leaks through.
+    this.running = false;
+    const task = this.activeTask;
+    let outputs: { outputDir: string; outputFiles: string[] } | undefined;
+    if (this.documentsDir && task?.completion) {
+      try {
+        const result = await copyOutputs({
+          workspaceDir: this.workspace.workspaceDir,
+          outputs: task.completion.outputs,
+          documentsDir: this.documentsDir,
+          appName: this.manifest.branding.productName,
+          jobName: this.jobName,
+        });
+        outputs = { outputDir: result.outputDir, outputFiles: result.files };
+      } catch {
+        // Outputs are a presentation nicety; a copy error must not lose work.
+      }
+    }
+    this.finish({ type: "finished", status: "success", ...outputs });
+  }
+
   private whileRunning(event: TaskEvent): void {
     if (this.running) this.emit(event);
   }
@@ -269,6 +352,8 @@ export class TaskRunner {
   private finish(event: Extract<TaskEvent, { type: "finished" }>): void {
     this.running = false;
     this.turnId = undefined;
+    this.progressWatcher?.stop();
+    this.progressWatcher = undefined;
     if (this.runId) this.store?.finishRun(this.runId, event.status, event.errorMessage);
     this.emit(event);
   }

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -37,6 +37,20 @@ const WORKSPACE: ProvisionedWorkspace = {
 };
 
 const adapters: CodexAdapter[] = [];
+const tempDirs: string[] = [];
+
+/** A real on-disk workspace so the progress watcher and outputs copy can run. */
+function makeWorkspace(): ProvisionedWorkspace {
+  const dir = mkdtempSync(join(tmpdir(), "foreman-runner-ws-"));
+  tempDirs.push(dir);
+  return { workspaceDir: dir, skillPaths: { translate: join(dir, "SKILL.md") } };
+}
+
+function makeTempDir(prefix: string): string {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  tempDirs.push(dir);
+  return dir;
+}
 
 function makeRunner(
   scenario: string,
@@ -73,7 +87,28 @@ function makeStore(): SessionStore {
 afterEach(async () => {
   await Promise.all(adapters.splice(0).map((adapter) => adapter.stop().catch(() => {})));
   for (const dir of storeDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
+
+/** A translate-book-shaped task: completion globs + a single "translate" skill. */
+function translateManifest(): AppManifest {
+  return {
+    schemaVersion: 1,
+    id: "translate-book",
+    name: "Könyvfordító",
+    version: "0.1.0",
+    branding: { productName: "Könyvfordító", colors: { primary: "#7c3aed" } },
+    sandbox: "workspace-write",
+    tasks: [
+      {
+        id: "translate",
+        label: { hu: "Fordítás" },
+        skill: { name: "translate", path: "skill/SKILL.md" },
+        completion: { outputs: ["**/*.epub", "**/*.pdf"] },
+      },
+    ],
+  };
+}
 
 describe("TaskRunner launch path (FR-4.1)", () => {
   test("launch starts a thread then a turn whose input is the skill ref plus a params text item", async () => {
@@ -431,5 +466,72 @@ describe("TaskRunner approval policy (FR-5.1/5.3, Phase 5)", () => {
 
     expect(finished(events)).toEqual({ type: "finished", status: "success" });
     expect(events).toContainEqual({ type: "actionDenied", kind: "fileChange" });
+  });
+});
+
+describe("TaskRunner progress + outputs (Phase 8)", () => {
+  test("progress.json writes during a run surface as ordered progress events (PRD Open Q2)", async () => {
+    const workspace = makeWorkspace();
+    const adapter = new CodexAdapter({
+      command: { bin: process.execPath, args: [MOCK_PEER, "steerable"] },
+    });
+    adapters.push(adapter);
+    const runner = new TaskRunner({ adapter, manifest: translateManifest(), workspace });
+    const events: TaskEvent[] = [];
+    runner.onEvent((event) => events.push(event));
+    await adapter.start();
+
+    await runner.launch("translate", { file_path: "book.epub" });
+    // The turn idles open (steerable), so the watcher is live; drive it.
+    writeFileSync(join(workspace.workspaceDir, "progress.json"), '{"current":1,"total":3}');
+    await vi.waitFor(() =>
+      expect(events.some((e) => e.type === "progress" && e.current === 1)).toBe(true),
+    );
+    writeFileSync(
+      join(workspace.workspaceDir, "progress.json"),
+      '{"current":2,"total":3,"label":"2. fejezet"}',
+    );
+    await vi.waitFor(() =>
+      expect(events.some((e) => e.type === "progress" && e.current === 2)).toBe(true),
+    );
+
+    const progress = events.filter((e) => e.type === "progress");
+    expect(progress).toEqual([
+      { type: "progress", current: 1, total: 3 },
+      { type: "progress", current: 2, total: 3, label: "2. fejezet" },
+    ]);
+  });
+
+  test("a successful run copies completion outputs to Documents and reports the folder (FR-6.3)", async () => {
+    const workspace = makeWorkspace();
+    const documentsDir = makeTempDir("foreman-runner-docs-");
+    // The skill's outputs already sit in the workspace when the turn completes.
+    writeFileSync(join(workspace.workspaceDir, "alice.epub"), "EPUB");
+    writeFileSync(join(workspace.workspaceDir, "alice.pdf"), "PDF");
+
+    const adapter = new CodexAdapter({
+      command: { bin: process.execPath, args: [MOCK_PEER, "happy"] },
+    });
+    adapters.push(adapter);
+    const runner = new TaskRunner({
+      adapter,
+      manifest: translateManifest(),
+      workspace,
+      documentsDir,
+    });
+    const events: TaskEvent[] = [];
+    runner.onEvent((event) => events.push(event));
+    await adapter.start();
+
+    await runner.launch("translate", { export_name: "alice" });
+    await vi.waitFor(() => expect(finished(events)).toBeTruthy());
+
+    const done = finished(events)!;
+    expect(done.status).toBe("success");
+    expect(done.outputDir).toBe(join(documentsDir, "Könyvfordító", "alice"));
+    expect(done.outputFiles?.sort()).toEqual(["alice.epub", "alice.pdf"]);
+    // Copied, not moved.
+    expect(existsSync(join(workspace.workspaceDir, "alice.epub"))).toBe(true);
+    expect(readFileSync(join(done.outputDir!, "alice.epub"), "utf8")).toBe("EPUB");
   });
 });

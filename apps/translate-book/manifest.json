@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "id": "translate-book",
+  "name": "Könyvfordító",
+  "version": "0.1.0",
+  "locale": "hu",
+  "branding": {
+    "productName": "Könyvfordító",
+    "colors": {
+      "primary": "#7c3aed",
+      "background": "#faf7ff",
+      "accent": "#c026d3"
+    }
+  },
+  "sandbox": "workspace-write",
+  "policy": {
+    "allowCommands": [["python3"], ["pandoc"], ["ebook-convert"]],
+    "allowCommandsForSession": [],
+    "allowFileChanges": true
+  },
+  "binaries": ["python3", "pandoc", "ebook-convert"],
+  "tasks": [
+    {
+      "id": "translate",
+      "label": { "hu": "Könyv fordítása", "en": "Translate a book" },
+      "description": {
+        "hu": "PDF, DOCX vagy EPUB könyv lefordítása magyarra, kész fájlokkal a Dokumentumok mappában.",
+        "en": "Translate a PDF, DOCX or EPUB book into Hungarian, with finished files in your Documents folder."
+      },
+      "skill": { "name": "translate-book", "path": "skill/SKILL.md" },
+      "params": [
+        {
+          "id": "file_path",
+          "type": "file",
+          "label": { "hu": "Könyv fájl", "en": "Book file" },
+          "required": true,
+          "extensions": ["pdf", "docx", "epub"]
+        },
+        {
+          "id": "epub_cover",
+          "type": "file",
+          "label": { "hu": "Borítókép (opcionális)", "en": "Cover image (optional)" },
+          "extensions": ["png", "jpg", "jpeg"]
+        },
+        {
+          "id": "export_name",
+          "type": "text",
+          "label": { "hu": "Kimeneti fájlnév (opcionális)", "en": "Output file name (optional)" }
+        },
+        {
+          "id": "address",
+          "type": "select",
+          "label": { "hu": "Megszólítás", "en": "Form of address" },
+          "default": "informal",
+          "options": [
+            { "value": "informal", "label": { "hu": "Tegező", "en": "Informal" } },
+            { "value": "formal", "label": { "hu": "Magázó", "en": "Formal" } }
+          ]
+        },
+        {
+          "id": "custom_instructions",
+          "type": "text",
+          "label": {
+            "hu": "Fordítási megjegyzések (opcionális)",
+            "en": "Translation notes (optional)"
+          }
+        }
+      ],
+      "completion": {
+        "outputs": ["**/*.epub", "**/*.docx", "**/*.pdf", "**/book.html"]
+      }
+    }
+  ]
+}

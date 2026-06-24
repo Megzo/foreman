@@ -52,6 +52,30 @@ describe("RunView renders from a recorded event stream (Phase 4)", () => {
     expect(screen.queryByText(/reasoning/)).toBeNull();
   });
 
+  test("progress events render a chunk N-of-M bar reflecting the latest update (Phase 8)", () => {
+    renderRun([
+      { type: "runStarted", taskId: "echo" },
+      { type: "progress", current: 10, total: 120 },
+      { type: "progress", current: 47, total: 120, label: "3. fejezet" },
+    ]);
+
+    const bar = screen.getByTestId("run-progress");
+    // Latest update wins; the user sees a count, never raw item events.
+    expect(bar.textContent).toMatch(/47.*120/);
+    expect(bar.textContent).toMatch(/3\. fejezet/);
+    const meter = bar.querySelector("progress");
+    expect(meter?.getAttribute("value")).toBe("47");
+    expect(meter?.getAttribute("max")).toBe("120");
+  });
+
+  test("with no progress event there is no progress bar", () => {
+    renderRun([
+      { type: "runStarted", taskId: "echo" },
+      { type: "agentDelta", text: "working" },
+    ]);
+    expect(screen.queryByTestId("run-progress")).toBeNull();
+  });
+
   test("a successful run shows the success terminal state (FR-4.6)", () => {
     renderRun([
       { type: "runStarted", taskId: "echo" },
@@ -61,6 +85,32 @@ describe("RunView renders from a recorded event stream (Phase 4)", () => {
 
     expect(screen.getByTestId("run-success")).toBeTruthy();
     expect(screen.queryByTestId("run-failed")).toBeNull();
+  });
+
+  test("a successful run with outputs lists the files and offers an Open-folder button (FR-6.3)", () => {
+    const opened: string[] = [];
+    render(
+      <RunView
+        task={TASK}
+        events={[
+          { type: "runStarted", taskId: "echo" },
+          {
+            type: "finished",
+            status: "success",
+            outputDir: "/home/u/Documents/App/alice",
+            outputFiles: ["alice.epub", "alice.pdf"],
+          },
+        ]}
+        onOpenOutput={(dir) => opened.push(dir)}
+      />,
+    );
+
+    const success = screen.getByTestId("run-success");
+    expect(success.textContent).toMatch(/alice\.epub/);
+    expect(success.textContent).toMatch(/alice\.pdf/);
+    const openButton = screen.getByRole("button", { name: /mappa megnyitása/i });
+    openButton.click();
+    expect(opened).toEqual(["/home/u/Documents/App/alice"]);
   });
 
   test("a policy denial appears as a friendly localized feed line and the run stays live (FR-5.3)", () => {

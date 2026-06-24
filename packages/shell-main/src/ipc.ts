@@ -73,9 +73,19 @@ export type TaskEvent =
   | { type: "itemStarted"; itemType: string }
   | { type: "itemCompleted"; itemType: string }
   | { type: "agentDelta"; text: string }
+  /** Chunk-N-of-M progress from the skill's progress.json (PRD Open Q2). */
+  | { type: "progress"; current: number; total: number; phase?: string; label?: string }
   /** The policy denied an agent action; the run continues (FR-5.3). */
   | { type: "actionDenied"; kind: "commandExecution" | "fileChange" }
-  | { type: "finished"; status: RunTerminalStatus; errorMessage?: string };
+  | {
+      type: "finished";
+      status: RunTerminalStatus;
+      errorMessage?: string;
+      /** On success, the Documents folder the outputs were copied to (FR-6.3). */
+      outputDir?: string;
+      /** Copied output files, relative to outputDir, for the success summary. */
+      outputFiles?: string[];
+    };
 
 /** One selectable option of a user-input question (schema: ToolRequestUserInputOption). */
 export interface UserInputOption {
@@ -131,4 +141,6 @@ export interface ShellApi {
   dismissResume(runId: string): Promise<void>;
   /** One-click agent restart after a codex-process death; resumes the active run (FR-2.5). */
   restartAgent(): Promise<void>;
+  /** Open a finished run's Documents output folder in the OS file manager (FR-6.3). */
+  openOutputDir(dir: string): Promise<void>;
 }

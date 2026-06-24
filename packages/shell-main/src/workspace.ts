@@ -29,9 +29,10 @@ const STATE_FILE = "provision-state.json";
 /**
  * Provisions the single hidden per-app workspace and copies manifest-declared
  * skill directories into the CODEX_HOME skills dir where codex discovers them.
- * Idempotent per bundle version: a re-run with an unchanged version copies
- * nothing, so files in place are never clobbered mid-life (FR-6.2 minimal —
- * version-bump re-provisioning lands in Phase 8).
+ * Idempotent per bundle version (FR-6.2): a re-run with an unchanged version
+ * copies nothing, so files in place are never clobbered mid-life; a version
+ * bump re-copies the managed skill dirs (refreshing them) while user-generated
+ * files in the hidden workspace — a separate tree — are never touched.
  */
 export class WorkspaceProvisioner {
   async provision(options: ProvisionOptions): Promise<ProvisionedWorkspace> {

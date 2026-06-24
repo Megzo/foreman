@@ -71,7 +71,7 @@ export function TaskScreen({
   const finished = events.some((event) => event.type === "finished");
   return (
     <section className="task-run">
-      <RunView task={task} events={events} />
+      <RunView task={task} events={events} onOpenOutput={(dir) => void api.openOutputDir(dir)} />
       <ChatPane
         messages={chatMessages}
         onSend={(text) => {

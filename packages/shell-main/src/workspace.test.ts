@@ -53,6 +53,29 @@ describe("WorkspaceProvisioner (FR-6.1, FR-6.2 minimal)", () => {
     expect(existsSync(join(codexHome, "skills", "echo", "helper.py"))).toBe(true);
   });
 
+  test("a bundle-version bump re-provisions managed skill files but leaves user files intact (FR-6.2)", async () => {
+    const { appDir, manifest } = makeBundle();
+    const { dataDir, codexHome } = makeDirs();
+    const provisioner = new WorkspaceProvisioner();
+
+    const first = await provisioner.provision({ manifest, appDir, dataDir, codexHome });
+    // The user drops a file into the hidden workspace during the first run...
+    const userFile = join(first.workspaceDir, "my-book.epub");
+    writeFileSync(userFile, "user data\n");
+    // ...and a managed skill file drifts (e.g. a half-applied edit).
+    writeFileSync(first.skillPaths["echo"]!, "stale\n");
+
+    // The app bundle ships a new version with an updated skill.
+    writeFileSync(join(appDir, "skill", "SKILL.md"), "# echo skill v2\n");
+    const bumped: AppManifest = { ...manifest, version: "0.2.0" };
+    const second = await provisioner.provision({ manifest: bumped, appDir, dataDir, codexHome });
+
+    // Managed files are refreshed from the new bundle...
+    expect(readFileSync(second.skillPaths["echo"]!, "utf8")).toContain("# echo skill v2");
+    // ...but user-generated workspace files are never deleted.
+    expect(readFileSync(userFile, "utf8")).toBe("user data\n");
+  });
+
   test("a second provision of the same bundle version is a no-op (FR-6.2 minimal)", async () => {
     const { appDir, manifest } = makeBundle();
     const { dataDir, codexHome } = makeDirs();

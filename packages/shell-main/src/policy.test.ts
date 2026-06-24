@@ -89,6 +89,42 @@ describe("PolicyEngine.decide — file changes (FR-5.1/5.2)", () => {
   });
 });
 
+describe("Translate-Book policy table (FR-5.5, Phase 8)", () => {
+  // The exact allowlist apps/translate-book bakes into its manifest.
+  const TRANSLATE_BOOK = {
+    allowCommands: [["python3"], ["pandoc"], ["ebook-convert"]],
+    allowFileChanges: true,
+  };
+
+  test.each([
+    [["python3", "scripts/convert.py", "book.epub"], "accept"],
+    [["pandoc", "--from", "epub", "--to", "html", "book.epub"], "accept"],
+    [["ebook-convert", "book.html", "book.epub"], "accept"],
+  ])("its bundled tools are allowed: %j", (command, decision) => {
+    expect(engine(TRANSLATE_BOOK).decide("commandExecution", { command })).toEqual({ decision });
+  });
+
+  test.each([
+    [["curl", "https://example.com"]], // network is off (FR-5.5)
+    [["rm", "-rf", "/"]],
+    [["bash", "-lc", "python3 evil.py"]], // anchored prefix: python3 must be argv[0]
+    [["pip", "install", "requests"]],
+  ])("everything else is denied (default deny, network off): %j", (command) => {
+    expect(engine(TRANSLATE_BOOK).decide("commandExecution", { command })).toEqual({
+      decision: "decline",
+    });
+  });
+
+  test("file changes within the workspace are accepted (workspace-write)", () => {
+    expect(
+      engine(TRANSLATE_BOOK).decide("fileChange", {
+        itemId: "i1",
+        grantRoot: "/data/workspace/alice_temp",
+      }),
+    ).toEqual({ decision: "accept" });
+  });
+});
+
 describe("PolicyEngine decision trail (FR-5.4)", () => {
   test("every decision reports the request, the matched rule, and the decision", () => {
     const records: PolicyDecisionRecord[] = [];

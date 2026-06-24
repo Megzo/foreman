@@ -25,7 +25,16 @@ function feedLine(itemType: string): string | undefined {
  * agent message, rendered purely from the recorded TaskEvent stream so the
  * Phase 7 transcript replay can reuse it unchanged.
  */
-export function RunView({ task, events }: { task: ManifestTask; events: TaskEvent[] }) {
+export function RunView({
+  task,
+  events,
+  onOpenOutput,
+}: {
+  task: ManifestTask;
+  events: TaskEvent[];
+  /** Opens the Documents output folder for the success state (FR-6.3). */
+  onOpenOutput?: (dir: string) => void;
+}) {
   const finished = events.find((event) => event.type === "finished");
   const message = events
     .filter((event) => event.type === "agentDelta")
@@ -44,6 +53,11 @@ export function RunView({ task, events }: { task: ManifestTask; events: TaskEven
   const thinking =
     finished === undefined &&
     events.some((event) => event.type === "itemStarted" && event.itemType === "reasoning");
+  // The latest progress.json update drives the chunk-N-of-M bar (Phase 8).
+  const progress = events.reduce<Extract<TaskEvent, { type: "progress" }> | undefined>(
+    (latest, event) => (event.type === "progress" ? event : latest),
+    undefined,
+  );
 
   return (
     <section className="run-view">
@@ -57,6 +71,15 @@ export function RunView({ task, events }: { task: ManifestTask; events: TaskEven
               ? t("Megszakítva")
               : t("Sikertelen")}
       </p>
+      {progress ? (
+        <div data-testid="run-progress" className="run-progress">
+          <progress value={progress.current} max={progress.total} />
+          <span className="run-progress-label">
+            {progress.current} / {progress.total}
+            {progress.label ? ` — ${progress.label}` : ""}
+          </span>
+        </div>
+      ) : null}
       <ul data-testid="run-feed" className="run-feed">
         {feed.map((line, index) => (
           <li key={index}>{line}</li>
@@ -69,9 +92,21 @@ export function RunView({ task, events }: { task: ManifestTask; events: TaskEven
         </p>
       ) : null}
       {finished?.status === "success" ? (
-        <p data-testid="run-success" className="run-terminal success">
-          {t("A feladat sikeresen befejeződött.")}
-        </p>
+        <div data-testid="run-success" className="run-terminal success">
+          <p>{t("A feladat sikeresen befejeződött.")}</p>
+          {finished.outputFiles && finished.outputFiles.length > 0 ? (
+            <ul className="run-outputs">
+              {finished.outputFiles.map((file) => (
+                <li key={file}>{file}</li>
+              ))}
+            </ul>
+          ) : null}
+          {finished.outputDir && onOpenOutput ? (
+            <button type="button" onClick={() => onOpenOutput(finished.outputDir!)}>
+              {t("Mappa megnyitása")}
+            </button>
+          ) : null}
+        </div>
       ) : null}
       {finished?.status === "failed" ? (
         <p data-testid="run-failed" className="run-terminal failed">

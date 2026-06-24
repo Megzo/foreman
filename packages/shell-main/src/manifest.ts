@@ -60,6 +60,16 @@ function validateFormField(value: unknown, field: string): void {
   }
 }
 
+function validateCompletion(value: unknown, field: string): void {
+  const completion = requireObject(value, field);
+  if (!Array.isArray(completion.outputs)) {
+    throw new ManifestError(`${field}.outputs`, "expected an array of output glob strings");
+  }
+  completion.outputs.forEach((glob, index) => {
+    requireString(glob, `${field}.outputs[${index}]`);
+  });
+}
+
 function validateTask(value: unknown, field: string): void {
   const task = requireObject(value, field);
   requireString(task.id, `${field}.id`);
@@ -70,6 +80,9 @@ function validateTask(value: unknown, field: string): void {
       throw new ManifestError(`${field}.params`, "expected an array");
     }
     task.params.forEach((param, index) => validateFormField(param, `${field}.params[${index}]`));
+  }
+  if (task.completion !== undefined) {
+    validateCompletion(task.completion, `${field}.completion`);
   }
 }
 
@@ -138,6 +151,12 @@ function validateManifest(value: unknown): AppManifest {
   }
   if (root.policy !== undefined) {
     validatePolicy(root.policy, "policy");
+  }
+  if (root.binaries !== undefined) {
+    if (!Array.isArray(root.binaries)) {
+      throw new ManifestError("binaries", "expected an array of executable names");
+    }
+    root.binaries.forEach((bin, index) => requireString(bin, `binaries[${index}]`));
   }
   const tasks = root.tasks;
   if (!Array.isArray(tasks) || tasks.length === 0) {

@@ -8,6 +8,9 @@ import { ManifestLoader } from "./manifest.js";
 const ECHO_DEMO_MANIFEST = fileURLToPath(
   new URL("../../../apps/echo-demo/manifest.json", import.meta.url),
 );
+const TRANSLATE_BOOK_MANIFEST = fileURLToPath(
+  new URL("../../../apps/translate-book/manifest.json", import.meta.url),
+);
 
 function writeManifest(content: unknown): string {
   const dir = mkdtempSync(join(tmpdir(), "foreman-manifest-"));
@@ -82,6 +85,34 @@ describe("ManifestLoader (FR-1.1, FR-1.2)", () => {
   });
 });
 
+describe("the Translate-Book app manifest (Phase 8, the real app)", () => {
+  test("loads with the FR-5.5 policy, bundled-binary requirements, form fields and completion globs", async () => {
+    const manifest = await new ManifestLoader().load(TRANSLATE_BOOK_MANIFEST);
+
+    // FR-5.5: workspace-write, network off (no allow rule grants it), and the
+    // bundled tools allowlisted.
+    expect(manifest.sandbox).toBe("workspace-write");
+    expect(manifest.policy?.allowCommands).toEqual(
+      expect.arrayContaining([["python3"], ["pandoc"], ["ebook-convert"]]),
+    );
+    // Health-checked at boot (PRD Integration).
+    expect(manifest.binaries).toEqual(
+      expect.arrayContaining(["python3", "pandoc", "ebook-convert"]),
+    );
+
+    const task = manifest.tasks[0]!;
+    // The PRD UX form: a PDF/DOCX/EPUB file picker plus the documented options.
+    const filePicker = task.params?.find((field) => field.type === "file");
+    expect(filePicker?.required).toBe(true);
+    expect(filePicker?.extensions).toEqual(expect.arrayContaining(["pdf", "docx", "epub"]));
+    expect(task.params?.some((field) => field.type === "select")).toBe(true);
+    // Completion globs cover the four user-facing output formats (FR-6.3).
+    expect(task.completion?.outputs).toEqual(
+      expect.arrayContaining(["**/*.epub", "**/*.docx", "**/*.pdf"]),
+    );
+  });
+});
+
 describe("task param form schema (FR-1.3, Phase 4)", () => {
   function withParams(params: unknown): Record<string, unknown> {
     const manifest = validManifest();
@@ -143,6 +174,58 @@ describe("task param form schema (FR-1.3, Phase 4)", () => {
 
     await expect(new ManifestLoader().load(writeManifest(manifest))).rejects.toThrow(
       /tasks\[0\]\.params\[1\]\.label\.hu/,
+    );
+  });
+});
+
+describe("task completion definition (FR-1.3, FR-6.3, Phase 8)", () => {
+  function withCompletion(completion: unknown): Record<string, unknown> {
+    const manifest = validManifest();
+    (manifest.tasks as Array<Record<string, unknown>>)[0]!.completion = completion;
+    return manifest;
+  }
+
+  test("a completion block with output globs loads; an omitted one stays undefined", async () => {
+    const loaded = await new ManifestLoader().load(
+      writeManifest(withCompletion({ outputs: ["*.epub", "*.docx"] })),
+    );
+    expect(loaded.tasks[0]?.completion).toEqual({ outputs: ["*.epub", "*.docx"] });
+
+    const without = await new ManifestLoader().load(writeManifest(validManifest()));
+    expect(without.tasks[0]?.completion).toBeUndefined();
+  });
+
+  test("a completion without an outputs array fails naming tasks[0].completion.outputs", async () => {
+    await expect(
+      new ManifestLoader().load(writeManifest(withCompletion({ outputs: "*.epub" }))),
+    ).rejects.toThrow(/tasks\[0\]\.completion\.outputs/);
+  });
+
+  test("a non-string output glob fails naming tasks[0].completion.outputs[1]", async () => {
+    await expect(
+      new ManifestLoader().load(writeManifest(withCompletion({ outputs: ["*.epub", 7] }))),
+    ).rejects.toThrow(/tasks\[0\]\.completion\.outputs\[1\]/);
+  });
+});
+
+describe("manifest bundled-binary requirements (FR-1.1, Phase 8)", () => {
+  test("a binaries array loads; an omitted one stays undefined", async () => {
+    const manifest = validManifest();
+    manifest.binaries = ["python3", "pandoc", "ebook-convert"];
+
+    const loaded = await new ManifestLoader().load(writeManifest(manifest));
+    expect(loaded.binaries).toEqual(["python3", "pandoc", "ebook-convert"]);
+
+    const without = await new ManifestLoader().load(writeManifest(validManifest()));
+    expect(without.binaries).toBeUndefined();
+  });
+
+  test("a non-string binary entry fails naming binaries[1]", async () => {
+    const manifest = validManifest();
+    manifest.binaries = ["python3", 42];
+
+    await expect(new ManifestLoader().load(writeManifest(manifest))).rejects.toThrow(
+      /binaries\[1\]/,
     );
   });
 });

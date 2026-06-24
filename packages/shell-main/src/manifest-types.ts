@@ -47,12 +47,21 @@ export interface ManifestFormField {
   extensions?: string[];
 }
 
+/**
+ * What a finished run presents (FR-1.3, FR-6.3): glob patterns, relative to the
+ * workspace, selecting the output files copied to Documents on success.
+ */
+export interface ManifestCompletion {
+  outputs: string[];
+}
+
 export interface ManifestTask {
   id: string;
   label: LocalizedString;
   description?: LocalizedString;
   skill: ManifestSkillRef;
   params?: ManifestFormField[];
+  completion?: ManifestCompletion;
 }
 
 /** Sandbox mode for thread/start (FR-5.2, first leg of the policy). */
@@ -81,5 +90,7 @@ export interface AppManifest {
   branding: ManifestBranding;
   sandbox?: ManifestSandboxMode;
   policy?: ManifestPolicy;
+  /** Executables that must be on PATH for the app to work (FR-1.1; health-checked at boot). */
+  binaries?: string[];
   tasks: ManifestTask[];
 }

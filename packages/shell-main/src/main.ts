@@ -2,6 +2,7 @@ import { dirname, join, resolve } from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { CodexAdapter, type AgentAdapter } from "@foreman/codex-adapter";
 import { AuthController } from "./auth-controller.js";
+import { checkBinaries } from "./binary-health.js";
 import { codexHomePath } from "./codex-home.js";
 import { DecisionLog } from "./decision-log.js";
 import type {
@@ -66,7 +67,12 @@ async function boot(): Promise<void> {
   let bootState: BootState;
   try {
     const manifest = await new ManifestLoader().load(manifestPath());
-    bootState = { ok: true, manifest, shellVersion: app.getVersion() };
+    // The manifest's bundled tools must be on PATH or the app can't work
+    // (PRD Integration); a miss blocks startup with a friendly repair message.
+    const health = await checkBinaries(manifest.binaries ?? []);
+    bootState = health.ok
+      ? { ok: true, manifest, shellVersion: app.getVersion() }
+      : { ok: false, error: health.message ?? "missing required tools" };
   } catch (error) {
     bootState = { ok: false, error: (error as Error).message };
   }
@@ -132,6 +138,8 @@ async function boot(): Promise<void> {
             manifest,
             workspace,
             store: sessionStore,
+            // Finished outputs land in the user's Documents (FR-6.3).
+            documentsDir: app.getPath("documents"),
             onPolicyDecision: (record) => decisionLog.append(record),
             onUserInput: (request) =>
               new Promise((resolve) => {
@@ -166,6 +174,8 @@ async function boot(): Promise<void> {
         pending?.(answers);
       },
     );
+    // "Open folder" on the success state opens the Documents output dir (FR-6.3).
+    ipcMain.handle("shell:openOutputDir", (_event, dir: string) => shell.openPath(dir));
     ipcMain.handle("shell:pickFile", async (_event, extensions?: string[]) => {
       const result = await dialog.showOpenDialog(window, {
         properties: ["openFile"],
