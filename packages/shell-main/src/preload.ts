@@ -7,6 +7,8 @@ import type { AuthState, ShellApi, TaskEvent, UserInputRequestPayload } from "./
  */
 const api: ShellApi = {
   getBootState: () => ipcRenderer.invoke("shell:getBootState"),
+  getSettings: () => ipcRenderer.invoke("shell:getSettings"),
+  setLocale: (locale) => ipcRenderer.invoke("shell:setLocale", locale),
   onAuthState(handler) {
     const listener = (_event: IpcRendererEvent, state: AuthState) => handler(state);
     ipcRenderer.on("shell:authState", listener);

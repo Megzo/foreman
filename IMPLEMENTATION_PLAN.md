@@ -228,7 +228,9 @@ Repo layout (PRD Open Q7): pnpm workspace in this directory, beside `t3code/` (g
 
 ---
 
-## Phase 9: i18n + branding proof (the "second manifest" criterion)
+## Phase 9: i18n + branding proof (the "second manifest" criterion) — ✅ COMPLETE (2026-06-24)
+
+> Done (red-green TDD): the `t()` stub became a real i18n layer (`packages/shell-renderer/src/{t,messages}.ts`) — hu is both the source literal and the en-catalog key, so every existing `t("…")` call site is untouched; under `en` the catalog string is returned, a missing key **falls back to the hu literal** (never a blank or marker), and `localized({hu,en})` selects per locale with hu fallback (6 tests). The active locale is a module singleton the whole tree reads; `App` mirrors its `locale` state into it each render and re-renders on switch, so no per-component `useT()` sweep was needed (kept the diff small and existing hu-default tests green). **Persistence**: `SettingsStore` (fs-backed `settings.json`, `schemaVersion`-stamped, fail-soft on corrupt — mirrors `SessionStore`/`DecisionLog`; default locale = manifest `locale ?? "hu"`, explicit choice overrides and survives restart, 4 tests); IPC gained `getSettings`/`setLocale` (registered **regardless of boot success** so the first paint always has a locale), preload + fake wired. **Settings menu** gained a Magyar/English switcher (language names stay in their own language → stable selectors, `aria-pressed` marks the active one); `App` applies the persisted locale at boot before the first real screen paints. **Branding**: extracted `themeTokens(branding)` (`theme.ts`) — `--color-primary/-background/-accent` with neutral/primary fallbacks — applied at the app root; window title already follows `branding.productName`; a pure token test + an App title test prove two manifests (echo-demo `#1f6feb` / translate-book `#7c3aed`, "Echo Demo" / "Könyvfordító") yield **distinct** token sets and titles (the framework-not-hardcoded acceptance item). **Guard**: an `en`-locale render of Login asserts the English text shows and the hu source is **absent** — fails if a literal bypasses `t()`. New E2E: switch locale in settings → home re-renders English → relaunch on the same userData boots fully in English (even the login screen). 176 vitest tests (+19) + 6 E2E (+1) + `pnpm typecheck`/`build`/`smoke` (real codex, 0.139.0 → mismatch logged non-fatally per FR-2.6, SPIKE_OK) all green; `t3code/` untouched, no Effect.ts dep. Note: visual styling of the new `.locale-switch` (and the rest of the task flow) is deliberately deferred to **Phase 9.5** — this phase wired i18n + branding *tokens*, not the layout pass.
 
 **Goal:** The whole UI renders in Hungarian by default and English on switch (FR-9.1), and the same unmodified shell runs echo-demo and translate-book with visibly different branding — the PRD's framework-not-hardcoded acceptance item, made repeatable.
 
@@ -249,6 +251,31 @@ Repo layout (PRD Open Q7): pnpm workspace in this directory, beside `t3code/` (g
 **Verification:** `pnpm test` + `pnpm e2e` green; manual: boot both apps' manifests, confirm distinct look; flip locale.
 
 **Dependencies:** Phases 3–8 (it sweeps the UI built so far).
+
+---
+
+## Phase 9.5: Visual polish — desktop-native look, manifest-driven theme
+
+**Goal:** The shell stops looking like a raw HTML page and starts looking like *the client's app* (PRD UX: "clean, large-type, desktop-native feel; branding driven by manifest … not like a coding tool"). Every screen — especially the task flow that was built behavior-first — gets real layout, spacing, and typography, and the manifest's branding colors drive the theme rather than leaking through on one stray link.
+
+> Why this exists: Phases 3–8 were behavior-first tracer bullets. `styles.css` only ever covered login/home/history/banners/startup-error; the **task screen, param form, run view and chat** widgets (Phases 4/6/8) shipped with **no CSS classes styled at all**, and `:root` carries a font but **no theme color tokens** (the manifest's `#7c3aed` only reaches the window title and the `.link` color). Phase 9 (i18n + branding) wires branding *tokens* but is explicitly not a layout/design pass — this phase is. Deferred by Peter's call on 2026-06-24 after seeing the bare translate-book form; do it after Phase 9 so the i18n sweep and theme tokens are already in place to build on.
+
+**Scope:** A small, boring design system — CSS custom properties for color/spacing/radius/typography seeded from manifest branding (`--brand-primary`, `--brand-bg`, `--brand-accent`, a neutral ramp), applied at `:root` from the loaded manifest so a second manifest restyles the whole app (ties to the Phase 9 branding-application test). Style the unstyled widgets: param form (labelled field rows, aligned controls, real file-picker buttons, inline required-field hints, a prominent primary "Indítás" button), run view (status header, progress bar, activity-feed cards, streamed-message panel, success/failed/cancelled terminal cards with the outputs list + "Mappa megnyitása"), chat pane (message bubbles, sticky composer), the user-input modal and confirm dialog (centered, backdrop, focus-trap), and login/home refinements (launcher cards, settings menu). Large type, generous spacing, desktop-native affordances; no coding-tool chrome.
+
+**Out of scope:** New behavior or IPC surface; animations beyond subtle transitions; a component/CSS framework dependency (keep it plain CSS + tokens — same "boring" rule as i18n); custom per-task React components (FR-1.4, still not needed); dark mode (unless a manifest token asks for it — defer).
+
+**Likely code areas:** `packages/shell-renderer/src/styles.css` (the bulk — tokens + per-widget rules); a tiny theme-application hook reading manifest branding into CSS variables (likely in `App.tsx`, reusing the Phase 9 branding work); className/structure tweaks across `widgets/{ParamForm,RunView,ChatPane,UserInputModal,ConfirmDialog}.tsx` and `screens/{Login,Home}.tsx` where markup needs hooks to style (no logic changes).
+
+**Tests first:** Visual polish is mostly manual/by-eye, but a few seams stay testable through the public surface — keep tests structural, never pixel snapshots:
+- Theme application: a manifest's branding colors land as the documented CSS custom properties on the root (assert the variables, not rendered pixels) — extends the Phase 9 branding test; two manifests yield two distinct token sets.
+- The param form renders a labelled control per field with its required-field hint and a single primary submit (assert roles/structure, reusing the existing ParamForm tests).
+- Existing component tests (RunView terminal states, chat, modal, login fallback URL) stay green after the markup reshuffle — the guard that styling didn't change behavior.
+
+**Implementation notes:** Lift the existing ad-hoc colors into tokens first, then restyle screen-by-screen; check each against the PRD UX section line by line. Use the `frontend-design` skill for the visual direction, but keep the output plain CSS + tokens (no framework). Verify both apps' manifests (echo-demo and translate-book) look distinct and intentional — that distinctness is also the Phase 9 "framework-not-hardcoded" acceptance item, now visible.
+
+**Verification:** `pnpm test` + `pnpm e2e` green (no behavior regressions); manual: boot both manifests, confirm a clean desktop-native look with each app's branding, the translate-book form/run/chat read as a finished product not a raw page, and a non-technical user could use it without it "looking like a coding tool".
+
+**Dependencies:** Phase 9 (theme tokens + i18n sweep land first; this builds the look on top).
 
 ---
 

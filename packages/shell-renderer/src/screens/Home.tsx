@@ -8,7 +8,7 @@ import type {
   ShellApi,
 } from "@foreman/shell-main/ipc";
 import { TaskScreen } from "./Task.js";
-import { localized, t } from "../t.js";
+import { localized, t, type Locale } from "../t.js";
 
 /** Localized run-status label, shared by the history rows and the resume offer. */
 function runStatusLabel(status: RunStatus): string {
@@ -29,11 +29,15 @@ export function Home({
   account,
   shellVersion,
   api,
+  locale,
+  onLocaleChange,
 }: {
   manifest: AppManifest;
   account: AccountInfo;
   shellVersion: string;
   api: ShellApi;
+  locale: Locale;
+  onLocaleChange: (locale: Locale) => void;
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [activeTask, setActiveTask] = useState<ManifestTask | undefined>();
@@ -98,6 +102,24 @@ export function Home({
           <p>
             {t("Verzió")}: {shellVersion} · {manifest.name} {manifest.version}
           </p>
+          <div className="locale-switch" role="group" aria-label={t("Nyelv")}>
+            {/* Language names stay in their own language (proper nouns), so the
+                control reads the same whichever locale is active. */}
+            <button
+              type="button"
+              aria-pressed={locale === "hu"}
+              onClick={() => onLocaleChange("hu")}
+            >
+              Magyar
+            </button>
+            <button
+              type="button"
+              aria-pressed={locale === "en"}
+              onClick={() => onLocaleChange("en")}
+            >
+              English
+            </button>
+          </div>
           <button type="button" onClick={() => void api.logout()}>
             {t("Kijelentkezés")}
           </button>

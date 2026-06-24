@@ -110,6 +110,25 @@ test("an agent question renders as a native form and the answer reaches the skil
   await expect(window.getByTestId("run-success")).toBeVisible();
 });
 
+test("switching the locale persists across relaunch (Phase 9, FR-9.1)", async () => {
+  // Boot in the hu default, sign in, then switch to English from the settings menu.
+  const userData = await launch();
+  await window.getByRole("button", { name: /Bejelentkezés ChatGPT/ }).click();
+  await window.getByRole("button", { name: "Beállítások" }).click();
+  await window.getByRole("button", { name: "English" }).click();
+
+  // The whole UI re-renders in English immediately.
+  await expect(window.getByRole("button", { name: "Settings" })).toBeVisible();
+  await expect(window.getByText("Recent tasks")).toBeVisible();
+  await app.close();
+
+  // Relaunch on the SAME userData: the persisted locale is applied at boot, so
+  // even the login screen comes up in English (FR-9.1).
+  await launch(undefined, userData);
+  await window.getByRole("button", { name: /Sign in with your ChatGPT account/ }).click();
+  await expect(window.getByRole("button", { name: "Settings" })).toBeVisible();
+});
+
 test("kill mid-run, relaunch, resume continues to success and the run is in history (Phase 7, FR-7.2/7.3)", async () => {
   // First boot: start a run whose turn stays open (steerable), so killing the
   // app leaves a persisted "running" record with its thread id — exactly the

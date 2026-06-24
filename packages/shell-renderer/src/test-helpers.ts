@@ -17,7 +17,7 @@ export const TEST_MANIFEST: AppManifest = {
   locale: "hu",
   branding: {
     productName: "Echo Demo",
-    colors: { primary: "#1f6feb", background: "#f6f8fa" },
+    colors: { primary: "#1f6feb", background: "#f6f8fa", accent: "#2da44e" },
   },
   tasks: [
     {
@@ -26,6 +26,26 @@ export const TEST_MANIFEST: AppManifest = {
       description: { hu: "Kiír egy üzenetet.", en: "Echoes a message." },
       skill: { name: "echo", path: "skill/SKILL.md" },
       params: [{ id: "message", type: "text", label: { hu: "Üzenet" }, required: true }],
+    },
+  ],
+};
+
+/** A second branding/manifest, to prove the shell is not hardcoded to one app. */
+export const TEST_MANIFEST_ALT: AppManifest = {
+  schemaVersion: 1,
+  id: "translate-book",
+  name: "Könyvfordító",
+  version: "0.1.0",
+  locale: "hu",
+  branding: {
+    productName: "Könyvfordító",
+    colors: { primary: "#7c3aed", background: "#faf7ff", accent: "#c026d3" },
+  },
+  tasks: [
+    {
+      id: "translate",
+      label: { hu: "Könyv fordítása", en: "Translate a book" },
+      skill: { name: "translate-book", path: "skill/SKILL.md" },
     },
   ],
 };
@@ -47,6 +67,8 @@ export interface FakeShell {
   /** Seed the history list and the startup resume offer (Phase 7). */
   runs: RunRecord[];
   resumable: RunRecord | undefined;
+  /** Seed the persisted locale getSettings returns at boot (Phase 9). */
+  settingsLocale: "hu" | "en";
 }
 
 export function makeFakeShell(boot: BootState = { ok: true, manifest: TEST_MANIFEST, shellVersion: "0.0.1" }): FakeShell {
@@ -63,6 +85,7 @@ export function makeFakeShell(boot: BootState = { ok: true, manifest: TEST_MANIF
     userInputAnswers,
     runs: [],
     resumable: undefined,
+    settingsLocale: "hu",
     pushAuth(state) {
       current = state;
       for (const handler of handlers) handler(state);
@@ -75,6 +98,11 @@ export function makeFakeShell(boot: BootState = { ok: true, manifest: TEST_MANIF
     },
     api: {
       getBootState: async () => boot,
+      getSettings: async () => ({ locale: shell.settingsLocale }),
+      setLocale: async (locale) => {
+        shell.settingsLocale = locale;
+        calls.push(`setLocale:${locale}`);
+      },
       onAuthState(handler) {
         handlers.add(handler);
         handler(current);

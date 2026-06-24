@@ -12,6 +12,11 @@ import type { AppManifest } from "./manifest-types.js";
 
 export type * from "./manifest-types.js";
 
+/** Persisted user settings (PRD State: locale override, plain JSON in app data). */
+export interface AppSettings {
+  locale: "hu" | "en";
+}
+
 /** Last-known `account/read` snapshot, for instant UI rendering (PRD State). */
 export interface AccountInfo {
   type: string;
@@ -117,6 +122,10 @@ export interface UserInputRequestPayload {
 
 export interface ShellApi {
   getBootState(): Promise<BootState>;
+  /** Persisted settings (locale) for the first paint; the manifest supplies the default (FR-9.1). */
+  getSettings(): Promise<AppSettings>;
+  /** Persist the user's locale choice from the settings menu (FR-9.1). */
+  setLocale(locale: AppSettings["locale"]): Promise<void>;
   /** Subscribe to auth-state changes; the current state is replayed on subscribe. */
   onAuthState(handler: (state: AuthState) => void): () => void;
   /** Begin a login; main opens the authUrl in the system browser for the chatgpt flow. */

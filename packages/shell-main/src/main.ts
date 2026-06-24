@@ -14,6 +14,7 @@ import type {
 } from "./ipc.js";
 import { ManifestLoader } from "./manifest.js";
 import { SessionStore } from "./session-store.js";
+import { SettingsStore } from "./settings-store.js";
 import { TaskRunner } from "./task-runner.js";
 import { WorkspaceProvisioner } from "./workspace.js";
 
@@ -94,6 +95,16 @@ async function boot(): Promise<void> {
   });
 
   ipcMain.handle("shell:getBootState", () => bootState);
+
+  // Persisted settings (FR-9.1): the manifest's locale is the default; an
+  // explicit choice in the settings menu overrides it and survives restarts.
+  // Registered regardless of boot success so the renderer's first paint can
+  // always read a locale.
+  const settings = new SettingsStore(app.getPath("userData"), {
+    locale: bootState.ok ? (bootState.manifest.locale ?? "hu") : "hu",
+  });
+  ipcMain.handle("shell:getSettings", () => settings.getSettings());
+  ipcMain.handle("shell:setLocale", (_event, locale: "hu" | "en") => settings.setLocale(locale));
 
   if (bootState.ok) {
     const adapter = makeAdapter();
