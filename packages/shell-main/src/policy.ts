@@ -27,7 +27,7 @@ export interface PolicyEngineOptions {
 
 /**
  * Answers every approval request from the manifest policy, never a dialog
- * (FR-5.1). Decisions are the exact wire values codex 0.138.0 accepts
+ * (FR-5.1). Decisions are the exact wire values codex 0.162.1 accepts
  * (schema.gen.ts CommandExecutionApprovalDecision): "accept",
  * "acceptForSession", or "decline" — never "cancel", which would abort the
  * turn instead of letting it continue past the denial (FR-5.3).
@@ -64,7 +64,9 @@ export class PolicyEngine {
     if (typeof request.cwd === "string") summary.cwd = request.cwd;
 
     const base = { kind: "commandExecution" as const, request: summary };
-    if (!argv) {
+    // Stdin writes reuse this method but carry the running process's command:
+    // allowing a process must not allow arbitrary input into it.
+    if (!argv || request.kind === "writeStdin") {
       return { ...base, matchedRule: null, decision: "decline" };
     }
     // Session patterns first: they are the more deliberate authoring choice
@@ -106,7 +108,7 @@ function commandArgv(command: CommandApprovalRequest["command"]): string[] | und
   if (Array.isArray(command) && command.every((part) => typeof part === "string")) {
     return command;
   }
-  // codex 0.138.0 sends `command` as one string (schema: string | null);
+  // codex (0.138.0 through 0.162.1) sends `command` as one string (schema: string | null);
   // whitespace tokenization is enough for anchored prefix matching.
   if (typeof command === "string" && command.trim() !== "") {
     return command.trim().split(/\s+/);

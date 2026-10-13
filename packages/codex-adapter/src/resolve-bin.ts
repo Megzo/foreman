@@ -29,7 +29,7 @@ export function resolveCodexBin(options: ResolveCodexBinOptions): string {
   }
 
   // npm global install: codex.cmd shim beside node_modules, real binary
-  // vendored in the platform package (layout verified against 0.138.0).
+  // vendored in the platform package (layout verified against 0.138.0 and 0.162.1).
   for (const dir of dirs) {
     if (!options.fileExists(`${dir}\\codex.cmd`)) continue;
     for (const [pkg, triple] of [

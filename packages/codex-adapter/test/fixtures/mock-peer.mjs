@@ -21,6 +21,8 @@
 //                turn-id precondition like the real server
 //   user-input   turn sends an item/tool/requestUserInput mid-turn, echoes
 //                the client's answers back as a delta, then completes
+//   current-time turn sends a currentTime/read server request (experimental,
+//                codex >= 0.162), echoes the result back as a delta, then completes
 //
 // thread/resume is handled in every scenario: it re-attaches the one mock
 // thread ("thread-1") and rejects any other id, so a resumed turn proves the
@@ -73,11 +75,24 @@ function runTurn(turnInput) {
     return;
   }
 
+  if (scenario === "current-time") {
+    sendServerRequest("currentTime/read", { threadId: SCOPE.threadId }, (response) => {
+      notify("item/agentMessage/delta", {
+        ...SCOPE,
+        delta: JSON.stringify(response.error ?? response.result),
+      });
+      completeTurn();
+    });
+    return;
+  }
+
   if (scenario === "user-input") {
     sendServerRequest(
       "item/tool/requestUserInput",
       {
         ...SCOPE,
+        isBlocking: true,
+        autoResolutionMs: null,
         questions: [
           {
             id: "tone",
@@ -115,7 +130,13 @@ function runTurn(turnInput) {
       scenario === "approval"
         ? [
             "item/commandExecution/requestApproval",
-            { ...SCOPE, command: ["bash", "-lc", "curl example.com"], cwd: "/tmp", startedAtMs: Date.now() },
+            {
+              ...SCOPE,
+              kind: "command",
+              command: ["bash", "-lc", "curl example.com"],
+              cwd: "/tmp",
+              startedAtMs: Date.now(),
+            },
           ]
         : [
             "item/fileChange/requestApproval",

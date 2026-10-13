@@ -130,6 +130,25 @@ describe("server-request callbacks (FR-2.1)", () => {
     expect(requests).toHaveLength(1);
     expect(requests[0]).toMatchObject({ command: ["bash", "-lc", "curl example.com"] });
   });
+
+  test("currentTime/read is answered with the current unix time in seconds (codex >= 0.162)", async () => {
+    const adapter = makeAdapter("current-time");
+    const deltas: string[] = [];
+    adapter.on("agentMessageDelta", (payload) => deltas.push(payload.delta));
+    const turnCompleted = new Promise<void>((resolve) => {
+      adapter.on("turnCompleted", () => resolve());
+    });
+
+    await adapter.start();
+    const thread = await adapter.startThread({ cwd: "/tmp" });
+    const before = Math.floor(Date.now() / 1000);
+    await adapter.startTurn({ threadId: thread.threadId, input: [{ type: "text", text: "go" }] });
+    await turnCompleted;
+
+    const result = JSON.parse(deltas.join("")) as { currentTimeAt: number };
+    expect(result.currentTimeAt).toBeGreaterThanOrEqual(before);
+    expect(result.currentTimeAt).toBeLessThanOrEqual(Math.floor(Date.now() / 1000));
+  });
 });
 
 describe("login (FR-3.2, Phase 2 CLI support)", () => {

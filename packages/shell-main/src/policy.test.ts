@@ -31,6 +31,18 @@ describe("PolicyEngine.decide — command execution (FR-5.1/5.2/5.3)", () => {
     ).toEqual({ decision: "decline" });
   });
 
+  test("input written to an existing terminal (kind writeStdin) is declined even when its command is allowed", () => {
+    // codex >= 0.162 routes stdin writes through the same approval method;
+    // an allowed long-running process must not turn into arbitrary input.
+    const policy = { allowCommands: [["python3"]], allowCommandsForSession: [["python3"]] };
+    expect(
+      engine(policy).decide("commandExecution", { kind: "writeStdin", command: ["python3"] }),
+    ).toEqual({ decision: "decline" });
+    expect(
+      engine(policy).decide("commandExecution", { kind: "command", command: ["python3", "main.py"] }),
+    ).toEqual({ decision: "acceptForSession" });
+  });
+
   test("a command matching a session-scoped pattern is accepted for the session (hot path)", () => {
     expect(
       engine({

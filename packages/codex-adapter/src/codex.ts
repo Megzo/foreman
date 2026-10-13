@@ -21,7 +21,7 @@ import type {
   WindowsSandboxSetupStartResult,
 } from "./types.js";
 
-export const PINNED_CODEX_VERSION = "0.138.0";
+export const PINNED_CODEX_VERSION = "0.162.1";
 
 export interface AdapterLogger {
   warn(message: string): void;
@@ -301,5 +301,9 @@ export class CodexAdapter implements AgentAdapter {
     bridge("commandExecutionApproval", "item/commandExecution/requestApproval");
     bridge("fileChangeApproval", "item/fileChange/requestApproval");
     bridge("userInput", "item/tool/requestUserInput");
+    // Experimental (codex >= 0.162): the agent asks the host for wall-clock time.
+    rpc.onServerRequest("currentTime/read", () => ({
+      currentTimeAt: Math.floor(Date.now() / 1000),
+    }));
   }
 }

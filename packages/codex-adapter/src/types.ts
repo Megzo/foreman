@@ -22,7 +22,7 @@ export interface AgentInfo {
 export interface AccountReadResult {
   account: {
     type: string;
-    email?: string;
+    email?: string | null;
     planType?: string;
   } | null;
   requiresOpenaiAuth?: boolean;
@@ -165,6 +165,8 @@ export interface ApprovalResponse {
 }
 
 export interface CommandApprovalRequest extends ItemScope {
+  /** schema (codex >= 0.162): "writeStdin" = input to an existing terminal. */
+  kind?: "command" | "writeStdin";
   command?: string[] | string;
   cwd?: string;
   [key: string]: unknown;
@@ -188,6 +190,8 @@ export interface UserInputQuestion {
 
 export interface UserInputRequest extends ItemScope {
   questions?: UserInputQuestion[];
+  /** schema (codex >= 0.162); false means codex does not wait for the answer. */
+  isBlocking?: boolean;
   [key: string]: unknown;
 }
 

@@ -341,7 +341,7 @@ Automated (every phase, and all green before release):
 - `pnpm install && pnpm build` — workspace builds clean.
 - `pnpm test` — all vitest suites (adapter/mock-peer, ManifestLoader, PolicyEngine table, provisioner, SessionStore, bundle tools, components).
 - `pnpm e2e` — Playwright-Electron suite on echo-demo with mock peer (launch→form→run→success; cancel; resume; locale switch; bundle-update relaunch).
-- `pnpm smoke` — real-codex echo-demo turn (local, pinned codex 0.138.0).
+- `pnpm smoke` — real-codex echo-demo turn (local, pinned codex 0.162.1; was 0.138.0 until 2026-10-13).
 - `pnpm smoke:translate-book` — dev-mode baseline-book translation, asserts output files exist.
 
 Manual, against `PRD.md` Acceptance Criteria (each maps to a checklist line in `docs/release-gate.md`):

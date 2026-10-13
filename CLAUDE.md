@@ -30,7 +30,9 @@ Full design doc (15 interview-resolved decisions, approved 2026-06-11):
 12. **Sequencing**: Translate-Book app (from `/home/megyo/projects/translate-book`) → Talk-to-my-DB (adds secrets + custom widget; doubles as the ERP client's paid pilot) → full ERP app for the window-and-door manufacturer.
 13. **Commercial**: MIT shell + open example verticals (incl. translate-book as the free flagship demo); client-specific manifests/skills/branding stay private. This is a consulting-leverage play, distinct from the separate ERP-ISV copilot product idea.
 
-## Codex app-server protocol facts (verified by the spike, codex-cli 0.138.0)
+## Codex app-server protocol facts (verified by the spike, codex-cli 0.138.0; re-checked on 0.162.1, 2026-10-13)
+
+- 0.162.1 deltas that matter: command approvals carry `kind: "command" | "writeStdin"` (policy declines writeStdin); `item/tool/requestUserInput` carries `isBlocking`; new experimental server request `currentTime/read` (adapter answers it). Note: the Windows real-machine GO verdict (Phase 2) was on 0.138.0 — re-run it on the new pin before Phase 11.
 
 - Wire: JSON-RPC 2.0, one JSON object per line over stdio. Handshake: `initialize` (send `capabilities: { experimentalApi: true }`) then `initialized` notification.
 - Lifecycle: `thread/start` (cwd, sandbox, model) → `turn/start` (threadId, input[]) → notifications `item/started`, `item/agentMessage/delta`, `item/completed`, `turn/completed`. Also `turn/steer`, `turn/interrupt`, `thread/resume`.
