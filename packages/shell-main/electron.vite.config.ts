@@ -7,7 +7,11 @@ const rendererRoot = resolve(import.meta.dirname, "../shell-renderer");
 export default defineConfig({
   main: {
     // Workspace packages ship TS sources, so bundle them instead of externalizing.
-    plugins: [externalizeDepsPlugin({ exclude: ["@foreman/codex-adapter"] })],
+    plugins: [
+      externalizeDepsPlugin({
+        exclude: ["@foreman/codex-adapter", "@foreman/app-bundle-tools"],
+      }),
+    ],
     build: {
       lib: { entry: "src/main.ts" },
     },

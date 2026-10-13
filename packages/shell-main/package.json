@@ -21,6 +21,7 @@
     "build:app": "electron-vite build"
   },
   "dependencies": {
+    "@foreman/app-bundle-tools": "workspace:*",
     "@foreman/codex-adapter": "workspace:*"
   },
   "devDependencies": {

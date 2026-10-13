@@ -297,3 +297,45 @@ describe("manifest policy block (FR-5.2, Phase 5)", () => {
     );
   });
 });
+
+describe("manifest update channels (FR-1.1, FR-8.3/8.4, Phase 10)", () => {
+  test("an updates block with feed URLs and a verification key loads; an omitted one stays undefined", async () => {
+    const without = await new ManifestLoader().load(writeManifest(validManifest()));
+    expect(without.updates).toBeUndefined();
+
+    const manifest = validManifest();
+    manifest.updates = {
+      bundleFeedUrl: "https://feed.example/stable/feed.json",
+      shellFeedUrl: "https://feed.example/stable",
+      publicKey: "-----BEGIN PUBLIC KEY-----\nABC\n-----END PUBLIC KEY-----\n",
+      channels: {
+        beta: { bundleFeedUrl: "https://feed.example/beta/feed.json" },
+      },
+    };
+
+    const loaded = await new ManifestLoader().load(writeManifest(manifest));
+    expect(loaded.updates?.bundleFeedUrl).toBe("https://feed.example/stable/feed.json");
+    expect(loaded.updates?.publicKey).toContain("BEGIN PUBLIC KEY");
+    expect(loaded.updates?.channels?.beta?.bundleFeedUrl).toBe(
+      "https://feed.example/beta/feed.json",
+    );
+  });
+
+  test("a non-string bundleFeedUrl fails naming updates.bundleFeedUrl", async () => {
+    const manifest = validManifest();
+    manifest.updates = { bundleFeedUrl: 42 };
+
+    await expect(new ManifestLoader().load(writeManifest(manifest))).rejects.toThrow(
+      /updates\.bundleFeedUrl/,
+    );
+  });
+
+  test("a channel without an object value fails naming updates.channels.beta", async () => {
+    const manifest = validManifest();
+    manifest.updates = { channels: { beta: "https://nope" } };
+
+    await expect(new ManifestLoader().load(writeManifest(manifest))).rejects.toThrow(
+      /updates\.channels\.beta/,
+    );
+  });
+});

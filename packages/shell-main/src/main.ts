@@ -1,10 +1,14 @@
+import { appendFileSync, existsSync, mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { CodexAdapter, type AgentAdapter } from "@foreman/codex-adapter";
 import { AuthController } from "./auth-controller.js";
 import { checkBinaries } from "./binary-health.js";
+import { BundleUpdater, type UpdateLogEntry } from "./bundle-updater.js";
 import { codexHomePath } from "./codex-home.js";
 import { DecisionLog } from "./decision-log.js";
+import { ShellUpdater, type AutoUpdaterLike, type UpdaterLogEntry } from "./updater.js";
+import { readUpdateChannel, resolveFeeds } from "./update-channel.js";
 import type {
   AuthState,
   BootState,
@@ -50,11 +54,32 @@ if (process.env.FOREMAN_USER_DATA) {
 // Resolve dev fixtures relative to the bundled entry (<pkg>/out/main/), which
 // is stable across `electron-vite dev` and a direct `electron out/main/main.js`
 // launch (E2E) — app.getAppPath() is not.
-function manifestPath(): string {
+function installedManifestPath(): string {
   return (
     process.env.FOREMAN_MANIFEST ??
     resolve(import.meta.dirname, "../../../../apps/echo-demo/manifest.json")
   );
+}
+
+/**
+ * The manifest the shell actually runs (FR-8.3): an applied app-bundle update
+ * lives under userData/bundle and takes precedence over the installed one, so a
+ * bundle published to the feed goes live on the next launch without reinstalling.
+ */
+function activeManifestPath(): string {
+  const applied = join(app.getPath("userData"), "bundle", "manifest.json");
+  return existsSync(applied) ? applied : installedManifestPath();
+}
+
+/** Append one JSON line per update event (PRD State: update events logged). */
+function logUpdate(entry: UpdateLogEntry | UpdaterLogEntry, layer: "bundle" | "shell"): void {
+  try {
+    const file = join(app.getPath("userData"), "logs", "updates.jsonl");
+    mkdirSync(dirname(file), { recursive: true });
+    appendFileSync(file, `${JSON.stringify({ time: new Date().toISOString(), layer, ...entry })}\n`);
+  } catch {
+    // Logging an update event must never break the update path (FR-8.6).
+  }
 }
 
 function makeAdapter(): AgentAdapter {
@@ -76,9 +101,31 @@ function makeAdapter(): AgentAdapter {
 }
 
 async function boot(): Promise<void> {
+  // Apply any app-bundle update staged by a previous run BEFORE reading the
+  // manifest — "apply on next launch" (FR-8.2), and a running task can never be
+  // present this early. Non-fatal: a missing/corrupt staged bundle leaves the
+  // app on its current one. currentVersion is only used by check(), not apply.
+  let preVersion = "0.0.0";
+  try {
+    preVersion = (await new ManifestLoader().load(activeManifestPath())).version;
+  } catch {
+    // No readable active manifest yet — apply may still fix that.
+  }
+  try {
+    await new BundleUpdater({
+      feedUrl: "",
+      publicKey: "",
+      currentVersion: preVersion,
+      dataDir: app.getPath("userData"),
+      log: (entry) => logUpdate(entry, "bundle"),
+    }).applyPending();
+  } catch {
+    // Apply failure is non-fatal (FR-8.6).
+  }
+
   let bootState: BootState;
   try {
-    const manifest = await new ManifestLoader().load(manifestPath());
+    const manifest = await new ManifestLoader().load(activeManifestPath());
     // The manifest's bundled tools must be on PATH or the app can't work
     // (PRD Integration); a miss blocks startup with a friendly repair message.
     const health = await checkBinaries(manifest.binaries ?? []);
@@ -155,7 +202,7 @@ async function boot(): Promise<void> {
       (runnerPromise ??= new WorkspaceProvisioner()
         .provision({
           manifest,
-          appDir: dirname(manifestPath()),
+          appDir: dirname(activeManifestPath()),
           dataDir: app.getPath("userData"),
           codexHome: codexHomePath(app.getPath("userData")),
         })
@@ -241,6 +288,46 @@ async function boot(): Promise<void> {
     });
 
     app.on("before-quit", () => void adapter.stop().catch(() => {}));
+
+    // Two-layer updates (FR-8). The provisioner's channel config selects the
+    // feed URLs; env overrides exist for local/E2E testing against a fixture.
+    const channel = resolveFeeds(manifest.updates, readUpdateChannel(app.getPath("userData")));
+    const bundleFeedUrl = process.env.FOREMAN_BUNDLE_FEED_URL ?? channel.bundleFeedUrl;
+    const bundlePublicKey = process.env.FOREMAN_BUNDLE_PUBLIC_KEY ?? channel.publicKey;
+    if (bundleFeedUrl && bundlePublicKey) {
+      const bundleUpdater = new BundleUpdater({
+        feedUrl: bundleFeedUrl,
+        publicKey: bundlePublicKey,
+        currentVersion: manifest.version,
+        dataDir: app.getPath("userData"),
+        log: (entry) => logUpdate(entry, "bundle"),
+      });
+      // Check at startup and at most once per 6 h while running (FR-8.3); a
+      // verified newer bundle stages and applies on the next launch.
+      void bundleUpdater.check();
+      const sixHours = 6 * 60 * 60 * 1000;
+      const timer = setInterval(() => void bundleUpdater.check(), sixHours);
+      app.on("before-quit", () => clearInterval(timer));
+    }
+
+    // Shell-binary auto-update (FR-8.2) — only meaningful on a packaged, signed
+    // build, so it is gated on isPackaged and proven in Phase 11. electron-updater
+    // is loaded via a runtime specifier so dev/test/typecheck never need the dep.
+    const shellFeedUrl = process.env.FOREMAN_SHELL_FEED_URL ?? channel.shellFeedUrl;
+    if (app.isPackaged && shellFeedUrl) {
+      const specifier = "electron-updater";
+      void import(/* @vite-ignore */ specifier)
+        .then((mod: { autoUpdater: AutoUpdaterLike }) => {
+          const shellUpdater = new ShellUpdater({
+            autoUpdater: mod.autoUpdater,
+            feedUrl: shellFeedUrl,
+            log: (entry) => logUpdate(entry, "shell"),
+          });
+          shellUpdater.start();
+          void shellUpdater.check();
+        })
+        .catch((error) => logUpdate({ event: "error", message: (error as Error).message }, "shell"));
+    }
 
     try {
       await adapter.start();

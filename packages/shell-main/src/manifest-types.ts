@@ -81,6 +81,27 @@ export interface ManifestPolicy {
   allowFileChanges?: boolean;
 }
 
+/** One alternate update channel a provisioner can opt a machine into (FR-12). */
+export interface ManifestChannel {
+  /** App-bundle feed.json URL for this channel. */
+  bundleFeedUrl?: string;
+  /** Shell-binary (electron-updater) feed base URL for this channel. */
+  shellFeedUrl?: string;
+}
+
+/**
+ * Two-layer update config (FR-1.1, FR-8): the default channel's feed URLs plus
+ * the Ed25519 public key bundles are verified against (FR-8.4 — in production
+ * this key is compiled into the shell; the manifest carries it for dev/test).
+ * Named `channels` let a provisioner pin a machine to e.g. "beta" via the local
+ * update-channel config file, so an untested update never lands in production.
+ */
+export interface ManifestUpdates extends ManifestChannel {
+  /** SPKI PEM public key used to verify downloaded app bundles (FR-8.4). */
+  publicKey?: string;
+  channels?: Record<string, ManifestChannel>;
+}
+
 export interface AppManifest {
   schemaVersion: 1;
   id: string;
@@ -92,5 +113,7 @@ export interface AppManifest {
   policy?: ManifestPolicy;
   /** Executables that must be on PATH for the app to work (FR-1.1; health-checked at boot). */
   binaries?: string[];
+  /** Update channel URLs + bundle verification key (FR-1.1, FR-8). */
+  updates?: ManifestUpdates;
   tasks: ManifestTask[];
 }

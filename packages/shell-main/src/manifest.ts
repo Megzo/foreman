@@ -115,6 +115,27 @@ function validatePolicy(value: unknown, field: string): void {
   }
 }
 
+function validateChannel(value: unknown, field: string): void {
+  const channel = requireObject(value, field);
+  for (const url of ["bundleFeedUrl", "shellFeedUrl"] as const) {
+    if (channel[url] !== undefined) requireString(channel[url], `${field}.${url}`);
+  }
+}
+
+function validateUpdates(value: unknown, field: string): void {
+  const updates = requireObject(value, field);
+  for (const url of ["bundleFeedUrl", "shellFeedUrl"] as const) {
+    if (updates[url] !== undefined) requireString(updates[url], `${field}.${url}`);
+  }
+  if (updates.publicKey !== undefined) requireString(updates.publicKey, `${field}.publicKey`);
+  if (updates.channels !== undefined) {
+    const channels = requireObject(updates.channels, `${field}.channels`);
+    for (const [name, channel] of Object.entries(channels)) {
+      validateChannel(channel, `${field}.channels.${name}`);
+    }
+  }
+}
+
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
 function requireColor(value: unknown, field: string): void {
@@ -157,6 +178,9 @@ function validateManifest(value: unknown): AppManifest {
       throw new ManifestError("binaries", "expected an array of executable names");
     }
     root.binaries.forEach((bin, index) => requireString(bin, `binaries[${index}]`));
+  }
+  if (root.updates !== undefined) {
+    validateUpdates(root.updates, "updates");
   }
   const tasks = root.tasks;
   if (!Array.isArray(tasks) || tasks.length === 0) {
